@@ -1,0 +1,19 @@
+SCHOLARIQ 3-MINUTE DEMO SCRIPT (Person S edits, Person J records)
+
+0:00-0:25  The problem
+  "Students juggle ten apps, and cloud AI tools do not know their own syllabus
+   and take their data."
+
+0:25-1:15  Prof. Pilot
+  Upload the syllabus PDF. Ask: ______________________  Show the page tag.
+
+1:15-2:00  Today plan
+  Paste a WhatsApp-style message: "______________________"
+  Click Find deadline, add the task, show the new order in Today's plan.
+
+2:00-2:30  Check-in
+  Save a tired check-in (4 hours sleep). Show the burnout ring and the shorter plan.
+
+2:30-3:00  Privacy and future
+  "Everything ran on this laptop with a local model. Nothing was sent to the cloud."
+  Mention the roadmap: GitHub Sentinel, exam mode, habits, attendance.

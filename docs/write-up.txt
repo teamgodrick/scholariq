@@ -1,0 +1,12 @@
+ScholarIQ is a privacy-first student life and academic OS that runs fully on the student's own laptop using a local language model through LM Studio.
+
+What we built:
+1) Prof. Pilot - the student uploads syllabus or notes PDFs. The backend splits them into sections, turns each into an embedding with a local model, and stores them in SQLite. When the student asks a question, the closest sections are retrieved and the local model answers only from them, with page citations. It can also generate practice questions.
+2) Chrono-Regulator - students add exams, labs and assignments, or paste a message from a WhatsApp group. The local model extracts the deadline, and a priority score (urgency plus task type) builds a ranked plan for today.
+3) Wellness Core - a 30-second daily check-in (sleep, mood, water) gives an explainable 0-100 burnout score. When the score is high, the plan shrinks to the top two tasks and advises rest.
+
+Tech stack: React + Vite frontend, FastAPI (Python) backend, SQLite database, LM Studio local server (OpenAI-compatible API) with a Llama instruct model for answers and nomic-embed-text for retrieval.
+
+How it solves the problem: one app replaces scattered chats, PDFs and notes. It knows the student's own syllabus, plans their deadlines and adjusts to how they feel, while keeping all data on their device at zero cost.
+
+(Add one line about Round 2 extras only if they are finished and working.)
