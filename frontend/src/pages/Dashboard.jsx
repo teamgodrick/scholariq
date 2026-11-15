@@ -121,19 +121,20 @@ export default function Dashboard() {
 
   return (
     <div>
-      {/* Crisp Cover Banner - Clear ScholarIQ Cosmic Background */}
+      {/* Crisp ScholarIQ Modern Cosmic Banner without emoji hat */}
       <div className="hero-banner">
-        <img
-          src="/banner-scholarIQ.jpeg"
-          alt="ScholarIQ Background"
-          style={{ width: "100%", maxHeight: "170px", objectFit: "cover", display: "block" }}
-        />
-        <div className="hero-overlay">
-          <div>
-            <h1 style={{ textShadow: "0 2px 10px rgba(0,0,0,0.8)" }}>Chrono-Regulator Command Center</h1>
-            <p className="muted small" style={{ margin: "2px 0 0", color: "#e9d5ff", textShadow: "0 1px 6px rgba(0,0,0,0.8)" }}>
+        <div className="hero-banner-content">
+          <div className="hero-brand-block">
+            <span className="hero-brand-title">scholarIQ</span>
+            <div className="hero-brand-sub">
+              STUDY <span>•</span> PLAN <span>•</span> THRIVE
+            </div>
+          </div>
+          <div className="hero-desc-block">
+            <span className="hero-desc-title">Chrono-Regulator Command Center</span>
+            <span className="hero-desc-date">
               {todayStr} • Academic Intelligence & Priority Daily Plan
-            </p>
+            </span>
           </div>
         </div>
       </div>
