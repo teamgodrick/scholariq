@@ -1,16 +1,16 @@
 # ScholarIQ — Study · Plan · Thrive
 ### Privacy-First Student Life & Academic Operating System
 
-ScholarIQ is an on-device, local-first Operating System designed specifically for B.Tech and college students across India. It consolidates syllabus notes, WhatsApp deadlines, GitHub code commits, attendance requirements, and mental/physical wellness into a single, cohesive daily cockpit.
+ScholarIQ is an on-device, local-first Operating System designed specifically for College students across India. It consolidates syllabus notes, WhatsApp deadlines, GitHub code commits, attendance requirements, and mental/physical wellness into a single, cohesive daily cockpit.
 
-Powered 100% locally by **Meta Llama 3.2 8B Instruct** (reasoning & chat) and **nomic-embed-text** (vector retrieval) through **LM Studio**. Zero student data leaves the machine, and cloud API cost is exactly ₹0.
+Powered encryptedly & locally by **Meta Llama 3.2 8B Instruct** (reasoning & chat) and **nomic-embed-text** (vector retrieval) through **LM Studio**. Zero student data leaves the machine, therefore is private and secured upto student and cloud API cost is exactly ₹0.
 
 ---
 
 ## 👥 Team ScholarIQ (3 Developers)
-1. **Jeet Thakar** — Lead Architect & AI Engineer (Local RAG Engine, Chroma/SQLite Vector Memory, Chrono-Regulator Algorithms)
-2. **Vydya Varshith** — Systems & Backend Specialist (FastAPI Server, SQLite Migrations, GitHub Sentinel Radar, Hardware Optimization)
-3. **Team Member 3** — Frontend & UX Engineer (Purple Cosmic Design System, Pomodoro Core, College Toolkit & Interactions)
+1. **Jeet Thakar** — Architect & AI Lead(Local RAG Engine, Chroma/SQLite Vector Memory, Chrono-Regulator Algorithms)
+2. **Sayan Saha** — Systems & Backend Lead(FastAPI Server, SQLite Migrations, GitHub Sentinel Radar, Hardware Optimization)
+3. **Aarush Dutta Majumdar** — Frontend & Prooftesting lead (Testing hthe website and features , testing profpilot with enough amount of test cases)
 
 ---
 
@@ -77,7 +77,7 @@ Powered 100% locally by **Meta Llama 3.2 8B Instruct** (reasoning & chat) and **
 
 ---
 
-## 📁 Repository Structure
+## 📁 Repository Structure :
 ```
 ScholarIQ/
 ├── 0-check-tools.bat       # Environment verification script
