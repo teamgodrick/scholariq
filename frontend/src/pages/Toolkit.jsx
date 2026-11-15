@@ -54,6 +54,18 @@ export default function Toolkit() {
   const [expenseForm, setExpenseForm] = useState({ title: "", amount: "", category: "Food" });
   const [habitTitle, setHabitTitle] = useState("");
 
+  // Upload States for Calendar & Timetable
+  const [uploadingCal, setUploadingCal] = useState(false);
+  const [uploadingTt, setUploadingTt] = useState(false);
+
+  // Editable Habit State
+  const [editingHabit, setEditingHabit] = useState(null);
+
+  // Editable Budget States
+  const [editingAllowance, setEditingAllowance] = useState(false);
+  const [newAllowanceVal, setNewAllowanceVal] = useState("");
+  const [editingExpense, setEditingExpense] = useState(null);
+
   const loadData = () => {
     api.getAttendance().then(setAttendance).catch(() => {});
     api.getHolidays().then(setHolidays).catch(() => {});
@@ -232,6 +244,107 @@ export default function Toolkit() {
       setBudget(res);
       setExpenseForm({ title: "", amount: "", category: "Food" });
       setNote("Expense logged!");
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleCalendarUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploadingCal(true);
+    try {
+      const res = await api.uploadCalendar(file);
+      setHolidays(res.holidays || []);
+      setNote(`🎉 Extracted and scheduled ${res.imported || 0} events/holidays from ${file.name}!`);
+    } catch (err) {
+      setError("Calendar file upload failed: " + err.message);
+    } finally {
+      setUploadingCal(false);
+      e.target.value = "";
+    }
+  }
+
+  async function handleTimetableUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploadingTt(true);
+    try {
+      const res = await api.uploadTimetable(file);
+      loadTimetable(timetableDay);
+      setNote(`📅 Extracted ${res.imported || 0} class slots from ${file.name}!`);
+    } catch (err) {
+      setError("Timetable file upload failed: " + err.message);
+    } finally {
+      setUploadingTt(false);
+      e.target.value = "";
+    }
+  }
+
+  async function handleSaveEditHabit(e) {
+    e.preventDefault();
+    if (!editingHabit) return;
+    try {
+      const res = await api.editHabit(editingHabit.id, {
+        title: editingHabit.title,
+        streak: Number(editingHabit.streak) || 0,
+        category: editingHabit.category || "Study",
+      });
+      setHabits(res);
+      setEditingHabit(null);
+      setNote("✅ Habit updated successfully!");
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleDeleteHabit(id) {
+    if (!window.confirm("Delete this habit streak?")) return;
+    try {
+      const res = await api.deleteHabit(id);
+      setHabits(res);
+      setNote("Habit removed.");
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleSaveAllowance(e) {
+    e.preventDefault();
+    const val = Number(newAllowanceVal);
+    if (isNaN(val) || val <= 0) return;
+    try {
+      const res = await api.setBudgetAllowance(val);
+      setBudget(res);
+      setEditingAllowance(false);
+      setNote(`✅ Monthly budget updated to ₹${val.toLocaleString()}!`);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleSaveEditExpense(e) {
+    e.preventDefault();
+    if (!editingExpense) return;
+    try {
+      const res = await api.editBudget(editingExpense.id, {
+        title: editingExpense.title,
+        amount: Number(editingExpense.amount) || 0,
+        category: editingExpense.category || "Food",
+      });
+      setBudget(res);
+      setEditingExpense(null);
+      setNote("✅ Expense updated!");
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleDeleteExpense(id) {
+    try {
+      const res = await api.deleteBudget(id);
+      setBudget(res);
+      setNote("Expense deleted.");
     } catch (err) {
       setError(err.message);
     }
@@ -551,10 +664,56 @@ export default function Toolkit() {
               On holidays, the system displays a celebratory pop-up and suspends all class schedules for that day.
             </p>
 
+            {/* Upload PDF / JPEG / JPG Academic Calendar */}
+            <div
+              style={{
+                margin: "14px 0",
+                padding: "14px",
+                background: "rgba(147, 51, 234, 0.12)",
+                border: "1px dashed var(--purple-bright)",
+                borderRadius: "10px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
+              }}
+            >
+              <div>
+                <strong style={{ color: "#ffffff", fontSize: "13.5px" }}>📤 Upload Academic Calendar (PDF / Image)</strong>
+                <p className="muted small" style={{ margin: "2px 0 0" }}>
+                  Upload official college calendar (.pdf, .jpg, .jpeg, .png) to auto-extract all holidays & exam dates.
+                </p>
+              </div>
+              <label
+                className="ghost"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  cursor: "pointer",
+                  padding: "8px 12px",
+                  background: "rgba(26, 13, 51, 0.8)",
+                  borderColor: "var(--purple-bright)",
+                  color: "#f3e8ff",
+                  fontWeight: 600,
+                  fontSize: "12.5px",
+                }}
+              >
+                <span>{uploadingCal ? "⏳ Reading & Extracting Calendar..." : "📁 Choose Calendar PDF / Image to Auto-Read"}</span>
+                <input
+                  type="file"
+                  accept=".pdf, .png, .jpg, .jpeg"
+                  disabled={uploadingCal}
+                  onChange={handleCalendarUpload}
+                  style={{ display: "none" }}
+                />
+              </label>
+            </div>
+
             {/* Paste / Attach Academic Calendar */}
             <form onSubmit={handleParseCalendar} style={{ margin: "14px 0" }}>
               <label>
-                Paste Academic Calendar Text or Holiday List
+                Or Paste Academic Calendar Text / Holiday List
                 <textarea
                   rows={3}
                   value={calendarText}
@@ -627,8 +786,54 @@ export default function Toolkit() {
           <div className="panel" style={{ minWidth: 0 }}>
             <h2>Weekly Timetable Manager</h2>
             <p className="muted small">
-              Customize periods and lectures for each day of the week.
+              Customize periods and lectures for each day of the week or upload your schedule.
             </p>
+
+            {/* Upload PDF / JPEG / JPG Timetable */}
+            <div
+              style={{
+                margin: "12px 0",
+                padding: "12px",
+                background: "rgba(99, 102, 241, 0.12)",
+                border: "1px dashed var(--indigo)",
+                borderRadius: "10px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
+              }}
+            >
+              <div>
+                <strong style={{ color: "#ffffff", fontSize: "13.5px" }}>📤 Upload Class Timetable (PDF / Image)</strong>
+                <p className="muted small" style={{ margin: "2px 0 0" }}>
+                  Upload your semester schedule (.pdf, .jpg, .jpeg, .png) to auto-populate class periods.
+                </p>
+              </div>
+              <label
+                className="ghost"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  cursor: "pointer",
+                  padding: "8px 12px",
+                  background: "rgba(26, 13, 51, 0.8)",
+                  borderColor: "var(--indigo)",
+                  color: "#f3e8ff",
+                  fontWeight: 600,
+                  fontSize: "12.5px",
+                }}
+              >
+                <span>{uploadingTt ? "⏳ Reading & Extracting Timetable..." : "📁 Choose Timetable PDF or Image"}</span>
+                <input
+                  type="file"
+                  accept=".pdf, .png, .jpg, .jpeg"
+                  disabled={uploadingTt}
+                  onChange={handleTimetableUpload}
+                  style={{ display: "none" }}
+                />
+              </label>
+            </div>
 
             {/* Day Selector */}
             <div style={{ display: "flex", gap: "4px", margin: "10px 0", flexWrap: "wrap" }}>
@@ -810,6 +1015,9 @@ export default function Toolkit() {
         <div className="cols">
           <div style={{ minWidth: 0 }}>
             <h2>Daily Discipline & Habit Streaks</h2>
+            <p className="muted small">
+              Click edit on any habit to modify streak count, name, or category. Click Mark Done to toggle today's streak!
+            </p>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "12px" }}>
               {habits.map((h) => (
                 <div
@@ -823,21 +1031,87 @@ export default function Toolkit() {
                     justifyContent: "space-between",
                     alignItems: "center",
                     minWidth: 0,
+                    gap: "8px",
                   }}
                 >
-                  <div style={{ minWidth: 0 }}>
-                    <strong style={{ color: "#ffffff", fontSize: "14px" }}>{h.title}</strong>
-                    <span className="muted small" style={{ display: "block" }}>
-                      Category: {h.category} • Streak: <b style={{ color: "#c084fc" }}>{h.streak} days 🔥</b>
-                    </span>
-                  </div>
-                  <button
-                    className={h.completed_today ? "primary" : "ghost"}
-                    onClick={() => handleToggleHabit(h.id)}
-                    style={{ padding: "6px 12px", fontSize: "12px", flexShrink: 0 }}
-                  >
-                    {h.completed_today ? "✓ Done Today" : "Mark Done"}
-                  </button>
+                  {editingHabit?.id === h.id ? (
+                    <form onSubmit={handleSaveEditHabit} style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center", width: "100%" }}>
+                      <input
+                        style={{ flex: 1, minWidth: "120px", padding: "4px 8px", fontSize: "12px" }}
+                        value={editingHabit.title}
+                        onChange={(e) => setEditingHabit({ ...editingHabit, title: e.target.value })}
+                        placeholder="Habit title"
+                      />
+                      <input
+                        type="number"
+                        style={{ width: "70px", padding: "4px 8px", fontSize: "12px" }}
+                        value={editingHabit.streak}
+                        onChange={(e) => setEditingHabit({ ...editingHabit, streak: e.target.value })}
+                        placeholder="Streak"
+                      />
+                      <input
+                        style={{ width: "90px", padding: "4px 8px", fontSize: "12px" }}
+                        value={editingHabit.category}
+                        onChange={(e) => setEditingHabit({ ...editingHabit, category: e.target.value })}
+                        placeholder="Category"
+                      />
+                      <button className="primary" type="submit" style={{ padding: "4px 8px", fontSize: "11px" }}>
+                        Save
+                      </button>
+                      <button className="ghost" type="button" onClick={() => setEditingHabit(null)} style={{ padding: "4px 8px", fontSize: "11px" }}>
+                        Cancel
+                      </button>
+                    </form>
+                  ) : (
+                    <>
+                      <div style={{ minWidth: 0 }}>
+                        <strong style={{ color: "#ffffff", fontSize: "14px" }}>{h.title}</strong>
+                        <span className="muted small" style={{ display: "block" }}>
+                          Category: {h.category} • Streak:{" "}
+                          <button
+                            onClick={() => setEditingHabit(h)}
+                            title="Click to edit streak count directly"
+                            style={{
+                              background: "rgba(168, 85, 247, 0.2)",
+                              border: "1px solid rgba(192, 132, 252, 0.4)",
+                              color: "#c084fc",
+                              borderRadius: "4px",
+                              padding: "1px 6px",
+                              cursor: "pointer",
+                              fontWeight: "bold",
+                            }}
+                          >
+                            {h.streak} days 🔥 (click to edit)
+                          </button>
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+                        <button
+                          className={h.completed_today ? "primary" : "ghost"}
+                          onClick={() => handleToggleHabit(h.id)}
+                          style={{ padding: "6px 10px", fontSize: "12px" }}
+                        >
+                          {h.completed_today ? "✓ Done" : "Mark Done"}
+                        </button>
+                        <button
+                          className="ghost"
+                          onClick={() => setEditingHabit(h)}
+                          style={{ padding: "6px 8px", fontSize: "11px", color: "var(--purple-bright)" }}
+                          title="Edit habit"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          className="ghost"
+                          onClick={() => handleDeleteHabit(h.id)}
+                          style={{ padding: "6px 8px", fontSize: "11px", color: "#fca5a5" }}
+                          title="Delete habit"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
@@ -851,7 +1125,7 @@ export default function Toolkit() {
                 <input
                   value={habitTitle}
                   onChange={(e) => setHabitTitle(e.target.value)}
-                  placeholder="e.g. Read 1 Research Paper"
+                  placeholder="e.g. Read 1 Research Paper, 30m Workout"
                 />
               </label>
               <button className="primary" type="submit" style={{ width: "100%", marginTop: "8px" }}>
@@ -866,7 +1140,38 @@ export default function Toolkit() {
       {activeSubTab === "budget" && budget && (
         <div className="cols">
           <div style={{ minWidth: 0 }}>
-            <h2>Hostel Pocket Money Tracker</h2>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
+              <h2>Hostel Pocket Money Tracker</h2>
+              {editingAllowance ? (
+                <form onSubmit={handleSaveAllowance} style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                  <input
+                    type="number"
+                    value={newAllowanceVal}
+                    onChange={(e) => setNewAllowanceVal(e.target.value)}
+                    placeholder="Monthly budget ₹"
+                    style={{ width: "120px", padding: "4px 8px", fontSize: "12px" }}
+                  />
+                  <button className="primary" type="submit" style={{ padding: "4px 8px", fontSize: "11px" }}>
+                    Save
+                  </button>
+                  <button className="ghost" type="button" onClick={() => setEditingAllowance(false)} style={{ padding: "4px 8px", fontSize: "11px" }}>
+                    Cancel
+                  </button>
+                </form>
+              ) : (
+                <button
+                  className="ghost"
+                  onClick={() => {
+                    setNewAllowanceVal(budget.total_allowance || 6000);
+                    setEditingAllowance(true);
+                  }}
+                  style={{ padding: "4px 10px", fontSize: "12px", color: "var(--purple-bright)", borderColor: "var(--purple-bright)" }}
+                >
+                  ✏️ Edit Monthly Budget (₹{budget.total_allowance?.toLocaleString()})
+                </button>
+              )}
+            </div>
+
             <div className="cols-3" style={{ margin: "14px 0" }}>
               <div className="radar-stat">
                 <div className="num" style={{ color: "#34d399", fontSize: "22px" }}>₹{budget.remaining}</div>
@@ -882,7 +1187,7 @@ export default function Toolkit() {
               </div>
             </div>
 
-            <h3>Recent Expenses</h3>
+            <h3>Recent Expenses (Editable)</h3>
             <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "8px" }}>
               {budget.history?.map((e) => (
                 <div
@@ -894,10 +1199,60 @@ export default function Toolkit() {
                     padding: "8px 12px",
                     display: "flex",
                     justifyContent: "space-between",
+                    alignItems: "center",
                   }}
                 >
-                  <span>{e.title} ({e.category})</span>
-                  <strong style={{ color: "#fca5a5" }}>-₹{e.amount}</strong>
+                  {editingExpense?.id === e.id ? (
+                    <form onSubmit={handleSaveEditExpense} style={{ display: "flex", gap: "6px", width: "100%", flexWrap: "wrap", alignItems: "center" }}>
+                      <input
+                        style={{ flex: 1, minWidth: "120px", padding: "4px 8px", fontSize: "12px" }}
+                        value={editingExpense.title}
+                        onChange={(e) => setEditingExpense({ ...editingExpense, title: e.target.value })}
+                        placeholder="Description"
+                      />
+                      <input
+                        type="number"
+                        style={{ width: "80px", padding: "4px 8px", fontSize: "12px" }}
+                        value={editingExpense.amount}
+                        onChange={(e) => setEditingExpense({ ...editingExpense, amount: e.target.value })}
+                        placeholder="₹ Amount"
+                      />
+                      <input
+                        style={{ width: "90px", padding: "4px 8px", fontSize: "12px" }}
+                        value={editingExpense.category}
+                        onChange={(e) => setEditingExpense({ ...editingExpense, category: e.target.value })}
+                        placeholder="Category"
+                      />
+                      <button className="primary" type="submit" style={{ padding: "4px 8px", fontSize: "11px" }}>Save</button>
+                      <button className="ghost" type="button" onClick={() => setEditingExpense(null)} style={{ padding: "4px 8px", fontSize: "11px" }}>Cancel</button>
+                    </form>
+                  ) : (
+                    <>
+                      <div>
+                        <span>{e.title}</span>
+                        <span className="muted small" style={{ marginLeft: "6px" }}>({e.category})</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <strong style={{ color: "#fca5a5" }}>-₹{e.amount}</strong>
+                        <button
+                          className="ghost"
+                          style={{ padding: "2px 6px", fontSize: "11px", color: "var(--purple-bright)" }}
+                          onClick={() => setEditingExpense(e)}
+                          title="Edit expense"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          className="ghost"
+                          style={{ padding: "2px 6px", fontSize: "11px", color: "#fca5a5" }}
+                          onClick={() => handleDeleteExpense(e.id)}
+                          title="Delete expense"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>

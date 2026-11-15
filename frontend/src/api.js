@@ -49,6 +49,16 @@ export const api = {
   addHoliday: (data) => req("/holidays", post(data)),
   deleteHoliday: (id) => req(`/holidays/${id}`, { method: "DELETE" }),
   parseCalendar: (text) => req("/calendar/parse", post({ text })),
+  uploadCalendar: (file) => {
+    const form = new FormData();
+    form.append("file", file);
+    return req("/calendar/upload", { method: "POST", body: form });
+  },
+  uploadTimetable: (file) => {
+    const form = new FormData();
+    form.append("file", file);
+    return req("/timetable/upload", { method: "POST", body: form });
+  },
 
   // Prof. Pilot (Multi-File Ingest & RAG)
   ingest: (files) => {
@@ -85,7 +95,12 @@ export const api = {
   getHabits: () => req("/habits"),
   toggleHabit: (id) => req("/habits/toggle", post({ id })),
   addHabit: (data) => req("/habits", post(data)),
+  editHabit: (id, data) => req(`/habits/${id}`, put(data)),
+  deleteHabit: (id) => req(`/habits/${id}`, { method: "DELETE" }),
   getBudget: () => req("/budget"),
   addBudget: (data) => req("/budget", post(data)),
+  setBudgetAllowance: (amount) => req("/budget/allowance", post({ amount })),
+  editBudget: (id, data) => req(`/budget/${id}`, put(data)),
+  deleteBudget: (id) => req(`/budget/${id}`, { method: "DELETE" }),
   generateExamPlan: (data) => req("/exam/plan", post(data)),
 };

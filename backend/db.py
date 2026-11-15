@@ -14,40 +14,52 @@ def conn():
 
 def _migrate(c):
     """Safely adds newly required columns to existing tables."""
-    # Check checkins columns
-    existing_checkins = [col[1] for col in c.execute("PRAGMA table_info(checkins)").fetchall()]
-    new_checkins_cols = [
-        ("level", "TEXT DEFAULT 'Low'"),
-        ("advice", "TEXT DEFAULT ''"),
-        ("meals", "INTEGER DEFAULT 3"),
-        ("exercise_m", "INTEGER DEFAULT 20"),
-        ("screentime_h", "REAL DEFAULT 6.0"),
-        ("created_at", "TEXT DEFAULT CURRENT_TIMESTAMP"),
-    ]
-    for col_name, col_type in new_checkins_cols:
-        if col_name not in existing_checkins:
-            c.execute(f"ALTER TABLE checkins ADD COLUMN {col_name} {col_type}")
+    try:
+        # Check checkins columns
+        existing_checkins = [col[1] for col in c.execute("PRAGMA table_info(checkins)").fetchall()]
+        new_checkins_cols = [
+            ("level", "TEXT DEFAULT 'Low'"),
+            ("advice", "TEXT DEFAULT ''"),
+            ("meals", "INTEGER DEFAULT 3"),
+            ("exercise_m", "INTEGER DEFAULT 20"),
+            ("screentime_h", "REAL DEFAULT 6.0"),
+            ("created_at", "TEXT DEFAULT ''"),
+        ]
+        for col_name, col_type in new_checkins_cols:
+            if col_name not in existing_checkins:
+                try:
+                    c.execute(f"ALTER TABLE checkins ADD COLUMN {col_name} {col_type}")
+                except Exception:
+                    pass
 
-    # Check tasks columns
-    existing_tasks = [col[1] for col in c.execute("PRAGMA table_info(tasks)").fetchall()]
-    new_tasks_cols = [
-        ("priority_override", "INTEGER DEFAULT NULL"),
-        ("created_at", "TEXT DEFAULT CURRENT_TIMESTAMP"),
-    ]
-    for col_name, col_type in new_tasks_cols:
-        if col_name not in existing_tasks:
-            c.execute(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}")
+        # Check tasks columns
+        existing_tasks = [col[1] for col in c.execute("PRAGMA table_info(tasks)").fetchall()]
+        new_tasks_cols = [
+            ("priority_override", "INTEGER DEFAULT NULL"),
+            ("created_at", "TEXT DEFAULT ''"),
+        ]
+        for col_name, col_type in new_tasks_cols:
+            if col_name not in existing_tasks:
+                try:
+                    c.execute(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}")
+                except Exception:
+                    pass
 
-    # Check attendance columns
-    existing_attendance = [col[1] for col in c.execute("PRAGMA table_info(attendance)").fetchall()]
-    new_attendance_cols = [
-        ("short_code", "TEXT DEFAULT ''"),
-        ("color", "TEXT DEFAULT '#a855f7'"),
-        ("total_semester", "INTEGER DEFAULT 60"),
-    ]
-    for col_name, col_type in new_attendance_cols:
-        if col_name not in existing_attendance:
-            c.execute(f"ALTER TABLE attendance ADD COLUMN {col_name} {col_type}")
+        # Check attendance columns
+        existing_attendance = [col[1] for col in c.execute("PRAGMA table_info(attendance)").fetchall()]
+        new_attendance_cols = [
+            ("short_code", "TEXT DEFAULT ''"),
+            ("color", "TEXT DEFAULT '#a855f7'"),
+            ("total_semester", "INTEGER DEFAULT 60"),
+        ]
+        for col_name, col_type in new_attendance_cols:
+            if col_name not in existing_attendance:
+                try:
+                    c.execute(f"ALTER TABLE attendance ADD COLUMN {col_name} {col_type}")
+                except Exception:
+                    pass
+    except Exception as e:
+        print(f"[Migration Notice] Migration completed with notice: {e}")
 
 
 def init():

@@ -17,6 +17,7 @@ const TABS = [
 
 export default function App() {
   const [tab, setTab] = useState("today");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [engine, setEngine] = useState({
     ok: true,
     text: "ScholarIQ Universal Engine Active",
@@ -63,11 +64,21 @@ export default function App() {
   const Current = TABS.find((t) => t.id === tab)?.view || Dashboard;
 
   return (
-    <div className="shell">
+    <div className={"shell" + (sidebarCollapsed ? " sidebar-collapsed" : "")}>
       {/* Sidebar Navigation */}
-      <aside className="side">
+      <aside className={"side" + (sidebarCollapsed ? " collapsed" : "")}>
+        {/* OpenAI-Style Toggle Arrow Button */}
+        <button
+          className="sidebar-toggle-btn"
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {sidebarCollapsed ? "›" : "‹"}
+        </button>
+
         <div className="brand">
-          <Logo size={42} showText={true} />
+          <Logo size={sidebarCollapsed ? 36 : 42} showText={!sidebarCollapsed} />
         </div>
 
         <nav aria-label="Main Navigation">
@@ -76,6 +87,7 @@ export default function App() {
               key={t.id}
               className={"nav" + (t.id === tab ? " active" : "")}
               onClick={() => setTab(t.id)}
+              title={sidebarCollapsed ? t.label : undefined}
             >
               <span className="nav-icon">{t.icon}</span>
               <span>{t.label}</span>
@@ -89,7 +101,7 @@ export default function App() {
           role="status"
           onClick={() => setShowConfig(!showConfig)}
           style={{ cursor: "pointer" }}
-          title="Click to configure AI Engine (Gemini / Offline / LM Studio)"
+          title={sidebarCollapsed ? `${engine.text} (Click to change)` : "Click to configure AI Engine (Gemini / Offline / LM Studio)"}
         >
           <span className={"dot " + (engine.ok ? "on" : "off")} />
           <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>

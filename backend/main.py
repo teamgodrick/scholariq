@@ -120,6 +120,12 @@ class HabitPayload(BaseModel):
     category: str = "Study"
 
 
+class HabitEditPayload(BaseModel):
+    title: str
+    streak: int
+    category: str = "Study"
+
+
 class HabitTogglePayload(BaseModel):
     id: int
 
@@ -129,6 +135,16 @@ class BudgetPayload(BaseModel):
     amount: float
     category: str = "Food"
     type: str = "expense"
+
+
+class BudgetAllowancePayload(BaseModel):
+    amount: float
+
+
+class BudgetEditPayload(BaseModel):
+    title: str
+    amount: float
+    category: str = "Food"
 
 
 class ExamPlanPayload(BaseModel):
@@ -391,6 +407,16 @@ def add_habit(p: HabitPayload):
     return toolkit.add_habit(p.title, p.category)
 
 
+@app.put("/habits/{habit_id}")
+def edit_habit(habit_id: int, p: HabitEditPayload):
+    return toolkit.edit_habit(habit_id, p.title, p.streak, p.category)
+
+
+@app.delete("/habits/{habit_id}")
+def remove_habit(habit_id: int):
+    return toolkit.delete_habit(habit_id)
+
+
 @app.get("/budget")
 def get_budget():
     return toolkit.get_budget()
@@ -399,6 +425,33 @@ def get_budget():
 @app.post("/budget")
 def add_budget(p: BudgetPayload):
     return toolkit.add_budget_entry(p.title, p.amount, p.category, p.type)
+
+
+@app.post("/budget/allowance")
+def set_allowance(p: BudgetAllowancePayload):
+    return toolkit.set_budget_allowance(p.amount)
+
+
+@app.put("/budget/{entry_id}")
+def edit_budget(entry_id: int, p: BudgetEditPayload):
+    return toolkit.edit_budget_entry(entry_id, p.title, p.amount, p.category)
+
+
+@app.delete("/budget/{entry_id}")
+def remove_budget(entry_id: int):
+    return toolkit.delete_budget_entry(entry_id)
+
+
+@app.post("/calendar/upload")
+async def upload_calendar_file(file: UploadFile = File(...)):
+    contents = await file.read()
+    return toolkit.parse_calendar_file(contents, file.filename)
+
+
+@app.post("/timetable/upload")
+async def upload_timetable_file(file: UploadFile = File(...)):
+    contents = await file.read()
+    return toolkit.parse_timetable_file(contents, file.filename)
 
 
 @app.post("/exam/plan")
