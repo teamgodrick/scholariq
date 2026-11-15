@@ -13,41 +13,56 @@ def conn():
 
 
 def _migrate(c):
-    """Safely adds newly required columns to existing tables."""
-    # Check checkins columns
-    existing_checkins = [col[1] for col in c.execute("PRAGMA table_info(checkins)").fetchall()]
-    new_checkins_cols = [
-        ("level", "TEXT DEFAULT 'Low'"),
-        ("advice", "TEXT DEFAULT ''"),
-        ("meals", "INTEGER DEFAULT 3"),
-        ("exercise_m", "INTEGER DEFAULT 20"),
-        ("screentime_h", "REAL DEFAULT 6.0"),
-        ("created_at", "TEXT DEFAULT CURRENT_TIMESTAMP"),
-    ]
-    for col_name, col_type in new_checkins_cols:
-        if col_name not in existing_checkins:
-            c.execute(f"ALTER TABLE checkins ADD COLUMN {col_name} {col_type}")
+    """Safely adds newly required columns to existing tables without ever crashing."""
+    try:
+        existing_checkins = [col[1] for col in c.execute("PRAGMA table_info(checkins)").fetchall()]
+        new_checkins_cols = [
+            ("level", "TEXT DEFAULT 'Low'"),
+            ("advice", "TEXT DEFAULT ''"),
+            ("meals", "INTEGER DEFAULT 3"),
+            ("exercise_m", "INTEGER DEFAULT 20"),
+            ("screentime_h", "REAL DEFAULT 6.0"),
+            ("created_at", "TEXT DEFAULT ''"),
+        ]
+        for col_name, col_type in new_checkins_cols:
+            if col_name not in existing_checkins:
+                try:
+                    c.execute(f"ALTER TABLE checkins ADD COLUMN {col_name} {col_type}")
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
-    # Check tasks columns
-    existing_tasks = [col[1] for col in c.execute("PRAGMA table_info(tasks)").fetchall()]
-    new_tasks_cols = [
-        ("priority_override", "INTEGER DEFAULT NULL"),
-        ("created_at", "TEXT DEFAULT CURRENT_TIMESTAMP"),
-    ]
-    for col_name, col_type in new_tasks_cols:
-        if col_name not in existing_tasks:
-            c.execute(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}")
+    try:
+        existing_tasks = [col[1] for col in c.execute("PRAGMA table_info(tasks)").fetchall()]
+        new_tasks_cols = [
+            ("priority_override", "INTEGER DEFAULT NULL"),
+            ("created_at", "TEXT DEFAULT ''"),
+        ]
+        for col_name, col_type in new_tasks_cols:
+            if col_name not in existing_tasks:
+                try:
+                    c.execute(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}")
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
-    # Check attendance columns
-    existing_attendance = [col[1] for col in c.execute("PRAGMA table_info(attendance)").fetchall()]
-    new_attendance_cols = [
-        ("short_code", "TEXT DEFAULT ''"),
-        ("color", "TEXT DEFAULT '#a855f7'"),
-        ("total_semester", "INTEGER DEFAULT 60"),
-    ]
-    for col_name, col_type in new_attendance_cols:
-        if col_name not in existing_attendance:
-            c.execute(f"ALTER TABLE attendance ADD COLUMN {col_name} {col_type}")
+    try:
+        existing_attendance = [col[1] for col in c.execute("PRAGMA table_info(attendance)").fetchall()]
+        new_attendance_cols = [
+            ("short_code", "TEXT DEFAULT ''"),
+            ("color", "TEXT DEFAULT '#a855f7'"),
+            ("total_semester", "INTEGER DEFAULT 60"),
+        ]
+        for col_name, col_type in new_attendance_cols:
+            if col_name not in existing_attendance:
+                try:
+                    c.execute(f"ALTER TABLE attendance ADD COLUMN {col_name} {col_type}")
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
 
 def init():
@@ -77,7 +92,7 @@ def init():
                 type TEXT DEFAULT 'assignment',
                 done INTEGER DEFAULT 0,
                 priority_override INTEGER DEFAULT NULL,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                created_at TEXT DEFAULT ''
             );
 
             CREATE TABLE IF NOT EXISTS checkins(
@@ -91,8 +106,8 @@ def init():
                 screentime_h REAL DEFAULT 6,
                 score INTEGER DEFAULT 25,
                 level TEXT DEFAULT 'Low',
-                advice TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                advice TEXT DEFAULT '',
+                created_at TEXT DEFAULT ''
             );
 
             CREATE TABLE IF NOT EXISTS timetable(
@@ -117,7 +132,7 @@ def init():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 filename TEXT,
                 description TEXT,
-                uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP
+                uploaded_at TEXT DEFAULT ''
             );
 
             CREATE TABLE IF NOT EXISTS github_repos(
@@ -149,9 +164,9 @@ def init():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 subject_id INTEGER,
                 date TEXT,
-                mark TEXT, -- 'P' (Present), 'A' (Absent), 'C' (No Class / Cancelled)
+                mark TEXT,
                 note TEXT DEFAULT '',
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                created_at TEXT DEFAULT ''
             );
 
             CREATE TABLE IF NOT EXISTS habits(
@@ -183,13 +198,18 @@ def init():
                 date TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS app_settings(
+                key TEXT PRIMARY KEY,
+                value TEXT
+            );
+
             CREATE TABLE IF NOT EXISTS exam_plans(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 subject TEXT,
                 exam_date TEXT,
                 syllabus_topics TEXT,
                 plan_json TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                created_at TEXT DEFAULT ''
             );
             """
         )
@@ -218,7 +238,6 @@ def _seed_defaults(c):
             ],
         )
 
-    # Seed initial attendance
     if c.execute("SELECT COUNT(*) FROM attendance").fetchone()[0] == 0:
         c.executemany(
             """INSERT INTO attendance(subject, short_code, color, attended, total, total_semester, target_pct)
@@ -232,7 +251,6 @@ def _seed_defaults(c):
             ],
         )
 
-    # Seed sample holidays
     if c.execute("SELECT COUNT(*) FROM holidays").fetchone()[0] == 0:
         c.executemany(
             """INSERT OR IGNORE INTO holidays(date, name, type) VALUES(?,?,?)""",
@@ -275,3 +293,8 @@ def _seed_defaults(c):
                 "",
             ),
         )
+
+    # Seed default monthly allowance in app_settings
+    c.execute(
+        """INSERT OR IGNORE INTO app_settings(key, value) VALUES('monthly_allowance', '6000')"""
+    )
