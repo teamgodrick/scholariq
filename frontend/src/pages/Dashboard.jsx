@@ -3,26 +3,56 @@ import { api } from "../api";
 
 const TYPES = ["exam", "lab", "assignment", "project", "placement", "other"];
 const bucket = (d) => (d <= 0 ? "now" : d <= 3 ? "soon" : "later");
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 export default function Dashboard() {
-  const [plan, setPlan] = useState({ items: [], tip: "", timetable: [], clashes: [] });
+  const [plan, setPlan] = useState({
+    items: [],
+    tip: "",
+    timetable: [],
+    clashes: [],
+    is_holiday: false,
+    holiday_name: "",
+  });
+  const [selectedDay, setSelectedDay] = useState(
+    new Date().toLocaleDateString("en-US", { weekday: "long" })
+  );
+  const [dayClasses, setDayClasses] = useState([]);
+  const [dayHoliday, setDayHoliday] = useState({ is_holiday: false, holiday_name: "" });
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [form, setForm] = useState({ title: "", due_date: "", type: "assignment" });
 
-  const load = () =>
+  const load = () => {
     api
       .plan()
-      .then(setPlan)
+      .then((data) => {
+        setPlan(data);
+        setDayClasses(data.timetable || []);
+        setDayHoliday({ is_holiday: data.is_holiday, holiday_name: data.holiday_name });
+      })
       .catch((e) => setError(e.message));
+  };
 
   useEffect(() => {
     load();
   }, []);
 
-  const today = new Date().toLocaleDateString("en-IN", {
+  // When student clicks a specific day of week
+  const fetchDaySchedule = (day) => {
+    setSelectedDay(day);
+    api
+      .getTimetable(day)
+      .then((res) => {
+        setDayClasses(res.classes || []);
+        setDayHoliday({ is_holiday: res.is_holiday, holiday_name: res.holiday_name });
+      })
+      .catch(() => {});
+  };
+
+  const todayStr = new Date().toLocaleDateString("en-IN", {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -91,68 +121,97 @@ export default function Dashboard() {
 
   return (
     <div>
-      {/* Hero Banner with cosmic ScholarIQ graphic */}
+      {/* Crisp Cover Banner - Clear ScholarIQ Cosmic Background */}
       <div className="hero-banner">
-        <img src="/banner-scholarIQ.jpeg" alt="ScholarIQ Banner" />
+        <img
+          src="/banner-scholarIQ.jpeg"
+          alt="ScholarIQ Background"
+          style={{ width: "100%", maxHeight: "170px", objectFit: "cover", display: "block" }}
+        />
         <div className="hero-overlay">
           <div>
-            <h1>Chrono-Regulator Command Center</h1>
-            <p className="muted" style={{ margin: "4px 0 0" }}>
-              {today} • Today's Academic & Deadline Priority Plan
+            <h1 style={{ textShadow: "0 2px 10px rgba(0,0,0,0.8)" }}>Chrono-Regulator Command Center</h1>
+            <p className="muted small" style={{ margin: "2px 0 0", color: "#e9d5ff", textShadow: "0 1px 6px rgba(0,0,0,0.8)" }}>
+              {todayStr} • Academic Intelligence & Priority Daily Plan
             </p>
           </div>
         </div>
       </div>
 
       {error && <p className="alert" role="alert">{error}</p>}
-      {note && <p className="ok small" style={{ marginBottom: "16px", padding: "10px 14px", background: "rgba(52, 211, 153, 0.1)", border: "1px solid rgba(52, 211, 153, 0.3)", borderRadius: "8px" }}>{note}</p>}
+      {note && (
+        <p
+          className="ok small"
+          style={{
+            marginBottom: "14px",
+            padding: "8px 12px",
+            background: "rgba(52, 211, 153, 0.1)",
+            border: "1px solid rgba(52, 211, 153, 0.3)",
+            borderRadius: "8px",
+          }}
+        >
+          {note}
+        </p>
+      )}
 
-      {/* Burnout-Aware Tip Banner */}
+      {/* Holiday Notification Popup / Banner if Today is Holiday */}
+      {plan.is_holiday && (
+        <div className="holiday-card">
+          <span style={{ fontSize: "28px" }}>🎉</span>
+          <div>
+            <strong style={{ fontSize: "16px", color: "#fef08a", display: "block" }}>
+              College Holiday Today: {plan.holiday_name}
+            </strong>
+            <span className="small" style={{ color: "#fde68a" }}>
+              All classes suspended. Enjoy your break, catch up on sleep, or make progress on your side projects!
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Burnout & Workload Tip */}
       <div className="tip">
-        <span style={{ fontSize: "20px" }}>💡</span>
-        <div style={{ flex: 1 }}>
-          <strong style={{ color: "#ffffff" }}>Chrono-Regulator Intelligence: </strong>
+        <span style={{ fontSize: "18px" }}>💡</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <strong style={{ color: "#ffffff" }}>Daily Intelligence: </strong>
           {plan.tip}
         </div>
         <button className="ghost" onClick={triggerReplan} disabled={busy} title="Auto-reschedule overdue tasks">
-          🔄 Re-plan Missed Tasks
+          🔄 Re-plan Tasks
         </button>
       </div>
 
-      {/* Clashes Alert */}
       {plan.clashes && plan.clashes.length > 0 && (
         <div className="alert" style={{ background: "rgba(251, 191, 36, 0.12)", borderColor: "var(--warn)", color: "#fef08a" }}>
-          ⚠️ <strong>Schedule Clash Detected:</strong> {plan.clashes.join(" | ")}
+          ⚠️ <strong>Schedule Clash:</strong> {plan.clashes.join(" | ")}
         </div>
       )}
 
       <div className="cols">
-        {/* Left Column: Priority Matrix */}
-        <section>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-            <div>
-              <h2>Ranked Priority Plan</h2>
-              <p className="muted small">
-                {plan.items?.length === 0
-                  ? "No pending tasks. You are all caught up!"
-                  : `${plan.items?.length} open tasks • ${urgentCount} urgent (due ≤ 24h)`}
-              </p>
-            </div>
-            <span className="privacy-badge">🔒 Local Evaluation Only</span>
+        {/* Left Column: Priority Tasks & Daily Schedule */}
+        <section style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+            <h2>Ranked Priority Plan</h2>
+            <span className="privacy-badge">🔒 Local Evaluation</span>
           </div>
+          <p className="muted small">
+            {plan.items?.length === 0
+              ? "No pending tasks. You are all caught up!"
+              : `${plan.items?.length} open tasks • ${urgentCount} urgent (due ≤ 24h)`}
+          </p>
 
           <ul className="plan">
             {plan.items?.map((i) => (
               <li key={i.id} className={`row ${bucket(i.days_left)}${i.deferred ? " deferred" : ""}`}>
                 <div className="row-main">
                   <strong>{i.title}</strong>
-                  <span className="muted small" style={{ marginTop: "3px" }}>
+                  <span className="muted small" style={{ marginTop: "2px" }}>
                     <span style={{ textTransform: "capitalize", color: "#c084fc", fontWeight: 600 }}>{i.type}</span> • {i.reason}
                     {i.deferred ? " • ⏸️ Deferred by Burnout Core" : ""}
                   </span>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <span className="score" title="Dynamic Priority Score (Urgency + Type)">
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                  <span className="score" title="Dynamic Priority Score">
                     {i.priority}
                   </span>
                   <button className="ghost" onClick={() => done(i.id)} title="Mark as finished">
@@ -161,7 +220,7 @@ export default function Dashboard() {
                   <button
                     className="ghost"
                     onClick={() => remove(i.id)}
-                    style={{ padding: "6px 8px", color: "#fca5a5" }}
+                    style={{ padding: "5px 8px", color: "#fca5a5" }}
                     title="Remove task"
                   >
                     ✕
@@ -171,27 +230,56 @@ export default function Dashboard() {
             ))}
           </ul>
 
-          {/* Today's Timetable Section */}
+          {/* Timetable Section with Day Selector */}
           <div className="gap">
-            <h2>Today&apos;s Class Timetable</h2>
-            <p className="muted small">Syncs with your weekly academic schedule and detects room clashes.</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "12px" }}>
-              {plan.timetable && plan.timetable.length > 0 ? (
-                plan.timetable.map((c) => (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+              <h2>Class Schedule ({selectedDay})</h2>
+              {/* Day filter pills */}
+              <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                {DAYS.map((d) => (
+                  <button
+                    key={d}
+                    className={`ghost ${selectedDay === d ? "active" : ""}`}
+                    style={{
+                      padding: "4px 8px",
+                      fontSize: "11px",
+                      background: selectedDay === d ? "rgba(168, 85, 247, 0.3)" : undefined,
+                      borderColor: selectedDay === d ? "var(--purple-bright)" : undefined,
+                    }}
+                    onClick={() => fetchDaySchedule(d)}
+                  >
+                    {d.slice(0, 3)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+              {dayHoliday.is_holiday ? (
+                <div className="holiday-card" style={{ margin: 0 }}>
+                  <span style={{ fontSize: "24px" }}>🏖️</span>
+                  <div>
+                    <strong style={{ color: "#fef08a" }}>Holiday: {dayHoliday.holiday_name}</strong>
+                    <p className="small muted" style={{ margin: "2px 0 0" }}>No classes scheduled on this day.</p>
+                  </div>
+                </div>
+              ) : dayClasses.length > 0 ? (
+                dayClasses.map((c) => (
                   <div
                     key={c.id}
                     style={{
                       background: "rgba(26, 13, 51, 0.6)",
                       border: "1px solid var(--line)",
-                      borderRadius: "10px",
-                      padding: "12px 16px",
+                      borderRadius: "9px",
+                      padding: "10px 14px",
                       display: "flex",
                       justifyContent: "space-between",
                       alignItems: "center",
+                      minWidth: 0,
                     }}
                   >
-                    <div>
-                      <strong style={{ color: "#ffffff" }}>{c.subject}</strong>
+                    <div style={{ minWidth: 0 }}>
+                      <strong style={{ color: "#ffffff", fontSize: "13.5px" }}>{c.subject}</strong>
                       <span className="muted small" style={{ display: "block" }}>
                         {c.room} • {c.professor} ({c.type})
                       </span>
@@ -201,10 +289,11 @@ export default function Dashboard() {
                         fontFamily: "JetBrains Mono, monospace",
                         color: "#c084fc",
                         background: "rgba(168, 85, 247, 0.15)",
-                        padding: "4px 10px",
-                        borderRadius: "6px",
-                        fontSize: "12px",
+                        padding: "3px 8px",
+                        borderRadius: "5px",
+                        fontSize: "11.5px",
                         fontWeight: 600,
+                        flexShrink: 0,
                       }}
                     >
                       {c.start_time} - {c.end_time}
@@ -212,33 +301,35 @@ export default function Dashboard() {
                   </div>
                 ))
               ) : (
-                <p className="muted small">No scheduled classes today. Great time for deep project focus!</p>
+                <p className="muted small" style={{ padding: "8px 0" }}>
+                  No classes scheduled for {selectedDay}.
+                </p>
               )}
             </div>
           </div>
         </section>
 
         {/* Right Column: AI Extraction & Add Task */}
-        <section className="panel">
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-            <span style={{ fontSize: "20px" }}>💬</span>
+        <section className="panel" style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+            <span style={{ fontSize: "18px" }}>💬</span>
             <h2>Paste WhatsApp Notice</h2>
           </div>
           <p className="muted small">
-            Paste messy CR announcements, club notices or lab emails. The local LLM parses dates, subjects and urgency.
+            Paste messy CR announcements, club notices or lab emails. The AI parses dates, subjects and urgency.
           </p>
           <textarea
-            rows={4}
+            rows={3}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="e.g. All 3rd year CSE students: DAA Lab Assignment 3 must be submitted on GitHub by this Friday 11:59 PM. Late submissions will lose 20% marks."
+            placeholder="e.g. All CSE 3rd years: DAA Lab Assignment 3 must be submitted on GitHub by this Friday 11:59 PM."
           />
           <button className="primary" onClick={extract} disabled={busy} style={{ width: "100%" }}>
-            {busy ? "Parsing with Llama 3.2..." : "🔍 Find Deadline with Local LLM"}
+            {busy ? "Parsing Notice..." : "🔍 Find Deadline with AI"}
           </button>
 
           <h2 className="gap">Schedule New Task</h2>
-          <form onSubmit={add} style={{ marginTop: "12px" }}>
+          <form onSubmit={add} style={{ marginTop: "10px" }}>
             <label>
               Task Title
               <input
@@ -270,7 +361,7 @@ export default function Dashboard() {
                 </select>
               </label>
             </div>
-            <button className="primary" type="submit" style={{ width: "100%", marginTop: "10px" }}>
+            <button className="primary" type="submit" style={{ width: "100%", marginTop: "8px" }}>
               ➕ Add to Priority Matrix
             </button>
           </form>

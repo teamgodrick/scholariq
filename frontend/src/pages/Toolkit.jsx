@@ -4,44 +4,80 @@ import { api } from "../api";
 export default function Toolkit() {
   const [activeSubTab, setActiveSubTab] = useState("attendance");
   const [attendance, setAttendance] = useState([]);
+  const [holidays, setHolidays] = useState([]);
   const [habits, setHabits] = useState([]);
   const [budget, setBudget] = useState(null);
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
 
-  // Attendance Form
-  const [newSubj, setNewSubj] = useState({ subject: "", attended: 20, total: 25, target_pct: 75.0 });
+  // Edit Subject State
+  const [editingSubj, setEditingSubj] = useState(null);
+
+  // New Subject Form
+  const [newSubj, setNewSubj] = useState({
+    subject: "",
+    short_code: "",
+    color: "#8A4FE0",
+    attended: 0,
+    total: 0,
+    total_semester: 60,
+    target_pct: 75.0,
+  });
+
+  // Calendar & Timetable Import States
+  const [calendarText, setCalendarText] = useState("");
+  const [newHoliday, setNewHoliday] = useState({ date: "", name: "", type: "Holiday" });
+
+  // Timetable Slot State
+  const [timetableDay, setTimetableDay] = useState("Monday");
+  const [timetableClasses, setTimetableClasses] = useState([]);
+  const [newSlot, setNewSlot] = useState({
+    day_of_week: "Monday",
+    subject: "",
+    start_time: "09:00",
+    end_time: "10:30",
+    room: "Room 101",
+    professor: "Dr. Smith",
+    type: "Lecture",
+  });
 
   // Exam Mode Planner Form
   const [examForm, setExamForm] = useState({
-    subject: "Distributed Systems & Cloud Computing",
+    subject: "Operating Systems & Concurrency",
     exam_date: new Date(Date.now() + 6 * 86400000).toISOString().slice(0, 10),
-    topics: "Raft Consensus, CAP Theorem, MapReduce, Vector Clocks, Microservices",
+    topics: "Semaphores, Deadlocks, Paging, Virtual Memory, Process Scheduling",
   });
   const [examRoadmap, setExamRoadmap] = useState("");
   const [busyExam, setBusyExam] = useState(false);
 
-  // Budget Form
+  // Budget & Habit Forms
   const [expenseForm, setExpenseForm] = useState({ title: "", amount: "", category: "Food" });
-
-  // Habit Form
   const [habitTitle, setHabitTitle] = useState("");
 
   const loadData = () => {
     api.getAttendance().then(setAttendance).catch(() => {});
+    api.getHolidays().then(setHolidays).catch(() => {});
     api.getHabits().then(setHabits).catch(() => {});
     api.getBudget().then(setBudget).catch(() => {});
+    loadTimetable(timetableDay);
+  };
+
+  const loadTimetable = (day) => {
+    setTimetableDay(day);
+    api.getTimetable(day).then((res) => setTimetableClasses(res.classes || [])).catch(() => {});
   };
 
   useEffect(() => {
     loadData();
   }, []);
 
-  async function handleMarkAttendance(subj, attended) {
+  // Attendance Handlers (P / A / C from the-thing)
+  async function handleMark(subjectId, mark) {
     try {
-      const res = await api.markAttendance({ subject: subj, attended });
+      const res = await api.markAttendance(subjectId, mark);
       setAttendance(res);
-      setNote(`Marked ${subj} as ${attended ? "attended ✅" : "missed ❌"}`);
+      const label = mark === "P" ? "Present (+1) ✅" : mark === "A" ? "Absent (+0) ❌" : "No Class / Cancelled (Neutral) ⏸️";
+      setNote(`Marked attendance: ${label}`);
     } catch (err) {
       setError(err.message);
     }
@@ -51,15 +87,117 @@ export default function Toolkit() {
     e.preventDefault();
     if (!newSubj.subject.trim()) return;
     try {
-      const res = await api.saveAttendance(newSubj);
+      const res = await api.addSubject(newSubj);
       setAttendance(res);
-      setNewSubj({ subject: "", attended: 20, total: 25, target_pct: 75.0 });
-      setNote("✅ Subject added to 75% Attendance Tracker!");
+      setNewSubj({
+        subject: "",
+        short_code: "",
+        color: "#8A4FE0",
+        attended: 0,
+        total: 0,
+        total_semester: 60,
+        target_pct: 75.0,
+      });
+      setNote("✅ Subject added to attendance manager!");
     } catch (err) {
       setError(err.message);
     }
   }
 
+  async function handleSaveEditSubject(e) {
+    e.preventDefault();
+    if (!editingSubj) return;
+    try {
+      const res = await api.updateSubject(editingSubj);
+      setAttendance(res);
+      setEditingSubj(null);
+      setNote("✅ Subject updated successfully!");
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleDeleteSubject(id) {
+    if (!window.confirm("Remove this subject from your attendance tracker?")) return;
+    try {
+      const res = await api.deleteSubject(id);
+      setAttendance(res);
+      setNote("Subject deleted.");
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  // Holiday Handlers
+  async function handleAddHoliday(e) {
+    e.preventDefault();
+    if (!newHoliday.date || !newHoliday.name.trim()) return;
+    try {
+      const res = await api.addHoliday(newHoliday);
+      setHolidays(res);
+      setNewHoliday({ date: "", name: "", type: "Holiday" });
+      setNote("🎉 Holiday added to Academic Calendar!");
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleDeleteHoliday(id) {
+    try {
+      const res = await api.deleteHoliday(id);
+      setHolidays(res);
+      setNote("Holiday removed.");
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleParseCalendar(e) {
+    e.preventDefault();
+    if (!calendarText.trim()) return;
+    try {
+      const res = await api.parseCalendar(calendarText);
+      setHolidays(res.holidays);
+      setCalendarText("");
+      setNote(`🎉 Extracted and scheduled ${res.imported} holidays from academic calendar!`);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  // Timetable Slot Handlers
+  async function handleAddSlot(e) {
+    e.preventDefault();
+    if (!newSlot.subject.trim()) return;
+    try {
+      const res = await api.addClass({ ...newSlot, day_of_week: timetableDay });
+      setTimetableClasses(res.classes || []);
+      setNewSlot({
+        day_of_week: timetableDay,
+        subject: "",
+        start_time: "09:00",
+        end_time: "10:30",
+        room: "Room 101",
+        professor: "Dr. Smith",
+        type: "Lecture",
+      });
+      setNote(`✅ Class slot added to ${timetableDay}!`);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleDeleteSlot(id) {
+    try {
+      const res = await api.deleteClass(id, timetableDay);
+      setTimetableClasses(res.classes || []);
+      setNote("Class removed from schedule.");
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  // Habit & Budget Handlers
   async function handleToggleHabit(id) {
     try {
       const res = await api.toggleHabit(id);
@@ -114,12 +252,12 @@ export default function Toolkit() {
   }
 
   return (
-    <div>
-      <header className="page-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px" }}>
+    <div style={{ minWidth: 0 }}>
+      <header className="page-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px" }}>
         <div>
-          <h1>Academic & Routine Toolkit</h1>
-          <p className="muted">
-            Essential engineering tools: 75% Attendance Safe-to-Skip, Habit Streaks, Hostel Budget & Exam Mode Planner.
+          <h1>College Academic OS</h1>
+          <p className="muted small">
+            Attendance manager (P/A/C), Calendar & Timetable with holiday detection, Habits, Budget, and Exam Mode.
           </p>
         </div>
         <span className="privacy-badge">🎓 College OS</span>
@@ -127,7 +265,7 @@ export default function Toolkit() {
 
       {error && <p className="alert" role="alert">{error}</p>}
       {note && (
-        <p className="ok small" style={{ marginBottom: "16px", padding: "10px 14px", background: "rgba(52, 211, 153, 0.1)", border: "1px solid rgba(52, 211, 153, 0.3)", borderRadius: "8px" }}>
+        <p className="ok small" style={{ marginBottom: "14px", padding: "8px 12px", background: "rgba(52, 211, 153, 0.1)", border: "1px solid rgba(52, 211, 153, 0.3)", borderRadius: "8px" }}>
           {note}
         </p>
       )}
@@ -135,7 +273,8 @@ export default function Toolkit() {
       {/* Sub Tabs */}
       <div className="mode-tabs">
         {[
-          { id: "attendance", label: "📊 75% Attendance Calculator" },
+          { id: "attendance", label: "📊 Attendance & 75% Rule" },
+          { id: "calendar", label: "📅 Calendar & Timetable Setup" },
           { id: "exam", label: "🎯 Exam Mode Planner" },
           { id: "habits", label: "🔥 Habit Streaks" },
           { id: "budget", label: "💰 Hostel Budget" },
@@ -150,145 +289,465 @@ export default function Toolkit() {
         ))}
       </div>
 
-      {/* 1. ATTENDANCE & SAFE-TO-SKIP */}
+      {/* 1. ATTENDANCE MANAGER (Modeled on the-thing) */}
       {activeSubTab === "attendance" && (
-        <div>
-          <div className="cols">
-            <div>
-              <h2>Course Attendance & Safe-to-Skip Analysis</h2>
-              <p className="muted small" style={{ marginBottom: "16px" }}>
-                Calculates mathematically whether you can safely bunk upcoming lectures or must attend consecutive classes to stay above the 75% college rule.
-              </p>
+        <div className="cols">
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+              <h2>Course Attendance & Safe-to-Skip</h2>
+              <span className="small muted">Target: 75% minimum</span>
+            </div>
+            <p className="muted small" style={{ marginBottom: "14px" }}>
+              Mark classes as <strong>P</strong> (Present), <strong>A</strong> (Absent), or <strong>C</strong> (No Class / Cancelled).
+              You can edit course details or remove default courses below.
+            </p>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                {attendance.map((a) => (
-                  <div key={a.id} className="att-card">
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div>
-                        <strong style={{ fontSize: "15px", color: "#ffffff" }}>{a.subject}</strong>
-                        <span className="muted small" style={{ display: "block", marginTop: "2px" }}>
-                          Attended: <b>{a.attended}</b> / Total: <b>{a.total}</b> classes
-                        </span>
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <span
-                          style={{
-                            fontSize: "18px",
-                            fontWeight: 800,
-                            color: a.is_safe ? "var(--good)" : "var(--bad)",
-                          }}
-                        >
-                          {a.percentage}%
-                        </span>
-                        <span className="muted small" style={{ display: "block" }}>
-                          (Target: {a.target_pct}%)
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="att-bar-track">
-                      <div
-                        className="att-bar-fill"
-                        style={{
-                          width: `${Math.min(100, a.percentage)}%`,
-                          background: a.is_safe
-                            ? "linear-gradient(90deg, #34d399, #10b981)"
-                            : "linear-gradient(90deg, #fb7185, #ef4444)",
-                        }}
-                      />
-                    </div>
-
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {attendance.map((a) => (
+                <div key={a.id} className="att-card">
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
                       <span
                         style={{
-                          fontSize: "12.5px",
-                          fontWeight: 700,
-                          color: a.is_safe ? "#a7f3d0" : "#fecdd3",
-                          background: a.is_safe ? "rgba(52, 211, 153, 0.15)" : "rgba(251, 113, 133, 0.15)",
-                          padding: "4px 10px",
-                          borderRadius: "6px",
+                          width: "10px",
+                          height: "10px",
+                          borderRadius: "2px",
+                          background: a.color || "#8A4FE0",
+                          display: "inline-block",
+                          flexShrink: 0,
                         }}
-                      >
-                        {a.is_safe ? `✅ ${a.status_text}` : `⚠️ ${a.status_text}`}
-                      </span>
-                      <div style={{ display: "flex", gap: "6px" }}>
-                        <button
-                          className="ghost"
-                          style={{ padding: "4px 10px", fontSize: "12px" }}
-                          onClick={() => handleMarkAttendance(a.subject, true)}
-                        >
-                          + Attended
-                        </button>
-                        <button
-                          className="ghost"
-                          style={{ padding: "4px 10px", fontSize: "12px", color: "#fca5a5" }}
-                          onClick={() => handleMarkAttendance(a.subject, false)}
-                        >
-                          + Missed
-                        </button>
+                      />
+                      <div style={{ minWidth: 0 }}>
+                        <strong style={{ fontSize: "14.5px", color: "#ffffff", display: "block", wordBreak: "break-word" }}>
+                          {a.subject}
+                        </strong>
+                        <span className="muted small">
+                          Held: <b>{a.total}</b> • Attended: <b style={{ color: a.is_safe ? "var(--good)" : "var(--bad)" }}>{a.attended}</b> • Sem Goal: {a.total_semester}
+                        </span>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
 
-            {/* Add Subject to Attendance */}
-            <div className="panel">
-              <h2>Add Subject to Tracker</h2>
-              <form onSubmit={handleAddSubject} style={{ marginTop: "14px" }}>
-                <label>
-                  Subject Name
-                  <input
-                    value={newSubj.subject}
-                    onChange={(e) => setNewSubj({ ...newSubj, subject: e.target.value })}
-                    placeholder="e.g. Operating Systems"
-                  />
-                </label>
-                <div className="two">
-                  <label>
-                    Attended Classes
-                    <input
-                      type="number"
-                      value={newSubj.attended}
-                      onChange={(e) => setNewSubj({ ...newSubj, attended: Number(e.target.value) })}
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      <span
+                        style={{
+                          fontSize: "20px",
+                          fontWeight: 800,
+                          color: a.is_safe ? "var(--good)" : "var(--bad)",
+                          fontFamily: "JetBrains Mono, monospace",
+                        }}
+                      >
+                        {a.percentage}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Visual Attendance Bar */}
+                  <div className="att-bar-track">
+                    <div
+                      className="att-bar-fill"
+                      style={{
+                        width: `${Math.min(100, a.percentage)}%`,
+                        background: a.is_safe
+                          ? "linear-gradient(90deg, #34d399, #10b981)"
+                          : "linear-gradient(90deg, #fb7185, #ef4444)",
+                      }}
                     />
-                  </label>
-                  <label>
-                    Total Classes Held
-                    <input
-                      type="number"
-                      value={newSubj.total}
-                      onChange={(e) => setNewSubj({ ...newSubj, total: Number(e.target.value) })}
-                    />
-                  </label>
+                  </div>
+
+                  {/* Status & One-Click P / A / C Buttons */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                    <span
+                      style={{
+                        fontSize: "11.5px",
+                        fontWeight: 700,
+                        color: a.is_safe ? "#a7f3d0" : "#fecdd3",
+                        background: a.is_safe ? "rgba(52, 211, 153, 0.15)" : "rgba(251, 113, 133, 0.15)",
+                        padding: "3px 8px",
+                        borderRadius: "5px",
+                      }}
+                    >
+                      {a.status_text}
+                    </span>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                      {/* Mark P (Present) */}
+                      <button
+                        className="ghost"
+                        style={{ padding: "4px 8px", fontSize: "11px", color: "var(--good)", borderColor: "rgba(52, 211, 153, 0.3)" }}
+                        onClick={() => handleMark(a.id, "P")}
+                        title="Present (+1 attended, +1 total)"
+                      >
+                        P (Present)
+                      </button>
+                      {/* Mark A (Absent) */}
+                      <button
+                        className="ghost"
+                        style={{ padding: "4px 8px", fontSize: "11px", color: "var(--bad)", borderColor: "rgba(251, 113, 133, 0.3)" }}
+                        onClick={() => handleMark(a.id, "A")}
+                        title="Absent (+0 attended, +1 total)"
+                      >
+                        A (Absent)
+                      </button>
+                      {/* Mark C (No Class) */}
+                      <button
+                        className="ghost"
+                        style={{ padding: "4px 8px", fontSize: "11px", color: "var(--cyan)", borderColor: "rgba(56, 189, 248, 0.3)" }}
+                        onClick={() => handleMark(a.id, "C")}
+                        title="No Class / Cancelled (Neutral)"
+                      >
+                        C (No Class)
+                      </button>
+                      {/* Edit */}
+                      <button
+                        className="ghost"
+                        style={{ padding: "4px 7px", fontSize: "11px" }}
+                        onClick={() => setEditingSubj(a)}
+                        title="Edit course counts"
+                      >
+                        ✏️
+                      </button>
+                      {/* Delete */}
+                      <button
+                        className="ghost"
+                        style={{ padding: "4px 7px", fontSize: "11px", color: "#fca5a5" }}
+                        onClick={() => handleDeleteSubject(a.id)}
+                        title="Delete course"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <label>
-                  Required Minimum Percentage
-                  <input
-                    type="number"
-                    value={newSubj.target_pct}
-                    onChange={(e) => setNewSubj({ ...newSubj, target_pct: Number(e.target.value) })}
-                  />
-                </label>
-                <button className="primary" type="submit" style={{ width: "100%", marginTop: "10px" }}>
-                  ➕ Track Subject
-                </button>
-              </form>
+              ))}
             </div>
+          </div>
+
+          {/* Add / Edit Subject Form */}
+          <div className="panel" style={{ minWidth: 0 }}>
+            {editingSubj ? (
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h2>Edit Course</h2>
+                  <button className="ghost" onClick={() => setEditingSubj(null)} style={{ fontSize: "11px" }}>
+                    Cancel
+                  </button>
+                </div>
+                <form onSubmit={handleSaveEditSubject} style={{ marginTop: "12px" }}>
+                  <label>
+                    Course Name
+                    <input
+                      value={editingSubj.subject}
+                      onChange={(e) => setEditingSubj({ ...editingSubj, subject: e.target.value })}
+                    />
+                  </label>
+                  <div className="two">
+                    <label>
+                      Classes Attended (PR)
+                      <input
+                        type="number"
+                        value={editingSubj.attended}
+                        onChange={(e) => setEditingSubj({ ...editingSubj, attended: Number(e.target.value) })}
+                      />
+                    </label>
+                    <label>
+                      Classes Held (Held Cls)
+                      <input
+                        type="number"
+                        value={editingSubj.total}
+                        onChange={(e) => setEditingSubj({ ...editingSubj, total: Number(e.target.value) })}
+                      />
+                    </label>
+                  </div>
+                  <div className="two">
+                    <label>
+                      Semester Total Planned
+                      <input
+                        type="number"
+                        value={editingSubj.total_semester}
+                        onChange={(e) => setEditingSubj({ ...editingSubj, total_semester: Number(e.target.value) })}
+                      />
+                    </label>
+                    <label>
+                      Target % (e.g. 75)
+                      <input
+                        type="number"
+                        value={editingSubj.target_pct}
+                        onChange={(e) => setEditingSubj({ ...editingSubj, target_pct: Number(e.target.value) })}
+                      />
+                    </label>
+                  </div>
+                  <button className="primary" type="submit" style={{ width: "100%", marginTop: "8px" }}>
+                    💾 Save Changes
+                  </button>
+                </form>
+              </div>
+            ) : (
+              <div>
+                <h2>Add Your College Subject</h2>
+                <p className="muted small">
+                  Add the exact subjects you take this semester.
+                </p>
+                <form onSubmit={handleAddSubject} style={{ marginTop: "12px" }}>
+                  <label>
+                    Course Name
+                    <input
+                      value={newSubj.subject}
+                      onChange={(e) => setNewSubj({ ...newSubj, subject: e.target.value })}
+                      placeholder="e.g. Computer Architecture & Organization"
+                    />
+                  </label>
+                  <div className="two">
+                    <label>
+                      Classes Attended
+                      <input
+                        type="number"
+                        value={newSubj.attended}
+                        onChange={(e) => setNewSubj({ ...newSubj, attended: Number(e.target.value) })}
+                      />
+                    </label>
+                    <label>
+                      Classes Held
+                      <input
+                        type="number"
+                        value={newSubj.total}
+                        onChange={(e) => setNewSubj({ ...newSubj, total: Number(e.target.value) })}
+                      />
+                    </label>
+                  </div>
+                  <div className="two">
+                    <label>
+                      Semester Total (Expected)
+                      <input
+                        type="number"
+                        value={newSubj.total_semester}
+                        onChange={(e) => setNewSubj({ ...newSubj, total_semester: Number(e.target.value) })}
+                      />
+                    </label>
+                    <label>
+                      Required %
+                      <input
+                        type="number"
+                        value={newSubj.target_pct}
+                        onChange={(e) => setNewSubj({ ...newSubj, target_pct: Number(e.target.value) })}
+                      />
+                    </label>
+                  </div>
+                  <button className="primary" type="submit" style={{ width: "100%", marginTop: "8px" }}>
+                    ➕ Add Subject to Tracker
+                  </button>
+                </form>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* 2. EXAM MODE REVISION PLANNER */}
+      {/* 2. CALENDAR & TIMETABLE SETUP */}
+      {activeSubTab === "calendar" && (
+        <div className="cols">
+          <div style={{ minWidth: 0 }}>
+            <h2>Academic Calendar & Holidays</h2>
+            <p className="muted small">
+              On holidays, the system displays a celebratory pop-up and suspends all class schedules for that day.
+            </p>
+
+            {/* Paste / Attach Academic Calendar */}
+            <form onSubmit={handleParseCalendar} style={{ margin: "14px 0" }}>
+              <label>
+                Paste Academic Calendar Text or Holiday List
+                <textarea
+                  rows={3}
+                  value={calendarText}
+                  onChange={(e) => setCalendarText(e.target.value)}
+                  placeholder="e.g.&#10;2026-11-20: University Sports Fest&#10;2026-12-25: Christmas Day&#10;2026-01-26: Republic Day"
+                />
+              </label>
+              <button className="primary" type="submit" disabled={!calendarText.trim()}>
+                📅 Parse & Save Calendar Holidays
+              </button>
+            </form>
+
+            <h3>Scheduled College Holidays</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "10px" }}>
+              {holidays.map((h) => (
+                <div
+                  key={h.id}
+                  style={{
+                    background: "rgba(26, 13, 51, 0.6)",
+                    border: "1px solid var(--line)",
+                    borderRadius: "8px",
+                    padding: "8px 12px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <div>
+                    <strong style={{ color: "#fef08a", fontSize: "13.5px" }}>🎉 {h.name}</strong>
+                    <span className="muted small" style={{ display: "block" }}>
+                      Date: {h.date} ({h.type})
+                    </span>
+                  </div>
+                  <button
+                    className="ghost"
+                    style={{ padding: "3px 6px", color: "#fca5a5", fontSize: "11px" }}
+                    onClick={() => handleDeleteHoliday(h.id)}
+                    title="Delete holiday"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Add Custom Holiday */}
+            <form onSubmit={handleAddHoliday} style={{ marginTop: "14px", borderTop: "1px solid var(--line)", paddingTop: "12px" }}>
+              <span className="small muted" style={{ fontWeight: 600, display: "block", marginBottom: "6px" }}>
+                Add Custom Single Holiday:
+              </span>
+              <div className="two">
+                <input
+                  type="date"
+                  value={newHoliday.date}
+                  onChange={(e) => setNewHoliday({ ...newHoliday, date: e.target.value })}
+                />
+                <input
+                  placeholder="Holiday Name (e.g. Cultural Fest)"
+                  value={newHoliday.name}
+                  onChange={(e) => setNewHoliday({ ...newHoliday, name: e.target.value })}
+                />
+              </div>
+              <button className="ghost" type="submit" style={{ marginTop: "6px" }}>
+                + Add Holiday
+              </button>
+            </form>
+          </div>
+
+          {/* Timetable Schedule Editor */}
+          <div className="panel" style={{ minWidth: 0 }}>
+            <h2>Weekly Timetable Manager</h2>
+            <p className="muted small">
+              Customize periods and lectures for each day of the week.
+            </p>
+
+            {/* Day Selector */}
+            <div style={{ display: "flex", gap: "4px", margin: "10px 0", flexWrap: "wrap" }}>
+              {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((d) => (
+                <button
+                  key={d}
+                  className={`ghost ${timetableDay === d ? "active" : ""}`}
+                  style={{
+                    padding: "4px 8px",
+                    fontSize: "11px",
+                    background: timetableDay === d ? "rgba(168, 85, 247, 0.3)" : undefined,
+                    borderColor: timetableDay === d ? "var(--purple-bright)" : undefined,
+                  }}
+                  onClick={() => loadTimetable(d)}
+                >
+                  {d.slice(0, 3)}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "14px" }}>
+              {timetableClasses.length > 0 ? (
+                timetableClasses.map((c) => (
+                  <div
+                    key={c.id}
+                    style={{
+                      background: "rgba(10, 5, 21, 0.7)",
+                      border: "1px solid var(--line)",
+                      borderRadius: "7px",
+                      padding: "8px 10px",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <div>
+                      <strong style={{ fontSize: "13px", color: "#ffffff" }}>{c.subject}</strong>
+                      <span className="muted small" style={{ display: "block" }}>
+                        {c.start_time} - {c.end_time} • {c.room} ({c.type})
+                      </span>
+                    </div>
+                    <button
+                      className="ghost"
+                      style={{ padding: "2px 6px", color: "#fca5a5", fontSize: "10px" }}
+                      onClick={() => handleDeleteSlot(c.id)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <p className="muted small">No class periods scheduled for {timetableDay}.</p>
+              )}
+            </div>
+
+            {/* Add Slot to Selected Day */}
+            <form onSubmit={handleAddSlot} style={{ borderTop: "1px solid var(--line)", paddingTop: "12px" }}>
+              <span className="small muted" style={{ fontWeight: 600, display: "block", marginBottom: "6px" }}>
+                Add Class to {timetableDay}:
+              </span>
+              <label>
+                Subject Name
+                <input
+                  value={newSlot.subject}
+                  onChange={(e) => setNewSlot({ ...newSlot, subject: e.target.value })}
+                  placeholder="e.g. Distributed Systems"
+                />
+              </label>
+              <div className="two">
+                <label>
+                  Start Time
+                  <input
+                    type="time"
+                    value={newSlot.start_time}
+                    onChange={(e) => setNewSlot({ ...newSlot, start_time: e.target.value })}
+                  />
+                </label>
+                <label>
+                  End Time
+                  <input
+                    type="time"
+                    value={newSlot.end_time}
+                    onChange={(e) => setNewSlot({ ...newSlot, end_time: e.target.value })}
+                  />
+                </label>
+              </div>
+              <div className="two">
+                <label>
+                  Room / Lab
+                  <input
+                    value={newSlot.room}
+                    onChange={(e) => setNewSlot({ ...newSlot, room: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Professor
+                  <input
+                    value={newSlot.professor}
+                    onChange={(e) => setNewSlot({ ...newSlot, professor: e.target.value })}
+                  />
+                </label>
+              </div>
+              <button className="primary" type="submit" style={{ width: "100%", marginTop: "6px" }}>
+                ➕ Add Class to {timetableDay}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 3. EXAM MODE REVISION PLANNER */}
       {activeSubTab === "exam" && (
         <div className="cols">
-          <div className="panel">
-            <h2>🎯 Exam Mode: AI Revision Strategist</h2>
+          <div className="panel" style={{ minWidth: 0 }}>
+            <h2>🎯 Exam Mode: Revision Strategist</h2>
             <p className="muted small">
-              Generates a day-by-day countdown revision plan based on your exam date, syllabus topics, and high-yield question patterns.
+              Generates a day-by-day countdown revision plan based on your exam date and high-yield topics.
             </p>
-            <form onSubmit={handleGenerateExamPlan} style={{ marginTop: "16px" }}>
+            <form onSubmit={handleGenerateExamPlan} style={{ marginTop: "12px" }}>
               <label>
                 Subject / Paper
                 <input
@@ -305,40 +764,40 @@ export default function Toolkit() {
                 />
               </label>
               <label>
-                Key Syllabus Topics / Units (comma separated)
+                Key Syllabus Topics / Units
                 <textarea
                   rows={3}
                   value={examForm.topics}
                   onChange={(e) => setExamForm({ ...examForm, topics: e.target.value })}
                 />
               </label>
-              <button className="primary" type="submit" disabled={busyExam} style={{ width: "100%", marginTop: "10px" }}>
-                {busyExam ? "Synthesizing Revision Strategy with Llama 3.2..." : "🚀 Generate Day-by-Day Exam Roadmap"}
+              <button className="primary" type="submit" disabled={busyExam} style={{ width: "100%", marginTop: "8px" }}>
+                {busyExam ? "Synthesizing Roadmap..." : "🚀 Generate Day-by-Day Roadmap"}
               </button>
             </form>
           </div>
 
-          <div className="panel">
+          <div className="panel" style={{ minWidth: 0 }}>
             <h2>Revision Schedule Output</h2>
             {examRoadmap ? (
               <div
                 style={{
                   background: "rgba(10, 5, 21, 0.8)",
                   border: "1px solid var(--line)",
-                  borderRadius: "10px",
-                  padding: "16px",
+                  borderRadius: "8px",
+                  padding: "14px",
                   whiteSpace: "pre-wrap",
-                  lineHeight: "1.6",
-                  fontSize: "14px",
-                  marginTop: "12px",
-                  maxHeight: "520px",
+                  lineHeight: "1.55",
+                  fontSize: "13px",
+                  marginTop: "10px",
+                  maxHeight: "480px",
                   overflowY: "auto",
                 }}
               >
                 {examRoadmap}
               </div>
             ) : (
-              <p className="muted small" style={{ marginTop: "14px" }}>
+              <p className="muted small" style={{ marginTop: "12px" }}>
                 Fill in your subject details and click Generate to receive a structured timeline with high-yield revision milestones.
               </p>
             )}
@@ -346,30 +805,28 @@ export default function Toolkit() {
         </div>
       )}
 
-      {/* 3. HABIT STREAKS */}
+      {/* 4. HABIT STREAKS */}
       {activeSubTab === "habits" && (
         <div className="cols">
-          <div>
+          <div style={{ minWidth: 0 }}>
             <h2>Daily Discipline & Habit Streaks</h2>
-            <p className="muted small" style={{ marginBottom: "16px" }}>
-              Keep compounding micro-habits across placements, coding, study, and wellness.
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "12px" }}>
               {habits.map((h) => (
                 <div
                   key={h.id}
                   style={{
                     background: "rgba(26, 13, 51, 0.6)",
                     border: "1px solid var(--line)",
-                    borderRadius: "12px",
-                    padding: "14px 18px",
+                    borderRadius: "10px",
+                    padding: "12px 14px",
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
+                    minWidth: 0,
                   }}
                 >
-                  <div>
-                    <strong style={{ color: "#ffffff", fontSize: "15px" }}>{h.title}</strong>
+                  <div style={{ minWidth: 0 }}>
+                    <strong style={{ color: "#ffffff", fontSize: "14px" }}>{h.title}</strong>
                     <span className="muted small" style={{ display: "block" }}>
                       Category: {h.category} • Streak: <b style={{ color: "#c084fc" }}>{h.streak} days 🔥</b>
                     </span>
@@ -377,27 +834,27 @@ export default function Toolkit() {
                   <button
                     className={h.completed_today ? "primary" : "ghost"}
                     onClick={() => handleToggleHabit(h.id)}
-                    style={{ padding: "8px 16px" }}
+                    style={{ padding: "6px 12px", fontSize: "12px", flexShrink: 0 }}
                   >
-                    {h.completed_today ? "✓ Completed Today" : "Mark Complete"}
+                    {h.completed_today ? "✓ Done Today" : "Mark Done"}
                   </button>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="panel">
+          <div className="panel" style={{ minWidth: 0 }}>
             <h2>Add Custom Habit</h2>
-            <form onSubmit={handleAddHabit} style={{ marginTop: "14px" }}>
+            <form onSubmit={handleAddHabit} style={{ marginTop: "12px" }}>
               <label>
                 Habit Name
                 <input
                   value={habitTitle}
                   onChange={(e) => setHabitTitle(e.target.value)}
-                  placeholder="e.g. Read 1 Research Paper or System Design Doc"
+                  placeholder="e.g. Read 1 Research Paper"
                 />
               </label>
-              <button className="primary" type="submit" style={{ width: "100%", marginTop: "10px" }}>
+              <button className="primary" type="submit" style={{ width: "100%", marginTop: "8px" }}>
                 ➕ Start Habit Streak
               </button>
             </form>
@@ -405,36 +862,36 @@ export default function Toolkit() {
         </div>
       )}
 
-      {/* 4. HOSTEL BUDGET TRACKER */}
+      {/* 5. HOSTEL BUDGET TRACKER */}
       {activeSubTab === "budget" && budget && (
         <div className="cols">
-          <div>
-            <h2>Hostel & Monthly Pocket Money Tracker</h2>
-            <div className="cols-3" style={{ margin: "16px 0" }}>
+          <div style={{ minWidth: 0 }}>
+            <h2>Hostel Pocket Money Tracker</h2>
+            <div className="cols-3" style={{ margin: "14px 0" }}>
               <div className="radar-stat">
-                <div className="num" style={{ color: "#34d399" }}>₹{budget.remaining}</div>
+                <div className="num" style={{ color: "#34d399", fontSize: "22px" }}>₹{budget.remaining}</div>
                 <div className="lbl">Remaining Budget</div>
               </div>
               <div className="radar-stat">
-                <div className="num" style={{ color: "#38bdf8" }}>₹{budget.daily_safe_spend}</div>
+                <div className="num" style={{ color: "#38bdf8", fontSize: "22px" }}>₹{budget.daily_safe_spend}</div>
                 <div className="lbl">Safe Daily Spend</div>
               </div>
               <div className="radar-stat">
-                <div className="num" style={{ color: "#c084fc" }}>{budget.days_left_in_month}d</div>
-                <div className="lbl">Days Left in Month</div>
+                <div className="num" style={{ color: "#c084fc", fontSize: "22px" }}>{budget.days_left_in_month}d</div>
+                <div className="lbl">Days Left</div>
               </div>
             </div>
 
             <h3>Recent Expenses</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "10px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "8px" }}>
               {budget.history?.map((e) => (
                 <div
                   key={e.id}
                   style={{
                     background: "rgba(26, 13, 51, 0.5)",
                     border: "1px solid var(--line)",
-                    borderRadius: "8px",
-                    padding: "10px 14px",
+                    borderRadius: "7px",
+                    padding: "8px 12px",
                     display: "flex",
                     justifyContent: "space-between",
                   }}
@@ -446,15 +903,15 @@ export default function Toolkit() {
             </div>
           </div>
 
-          <div className="panel">
+          <div className="panel" style={{ minWidth: 0 }}>
             <h2>Log Expense</h2>
-            <form onSubmit={handleAddExpense} style={{ marginTop: "14px" }}>
+            <form onSubmit={handleAddExpense} style={{ marginTop: "12px" }}>
               <label>
                 Item / Description
                 <input
                   value={expenseForm.title}
                   onChange={(e) => setExpenseForm({ ...expenseForm, title: e.target.value })}
-                  placeholder="e.g. Mess coupon, Stationery, Printing"
+                  placeholder="e.g. Mess coupon, Stationery"
                 />
               </label>
               <label>
@@ -463,7 +920,7 @@ export default function Toolkit() {
                   type="number"
                   value={expenseForm.amount}
                   onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
-                  placeholder="250"
+                  placeholder="200"
                 />
               </label>
               <label>
@@ -479,7 +936,7 @@ export default function Toolkit() {
                   <option>Recreation</option>
                 </select>
               </label>
-              <button className="primary" type="submit" style={{ width: "100%", marginTop: "10px" }}>
+              <button className="primary" type="submit" style={{ width: "100%", marginTop: "8px" }}>
                 ➕ Log Expense
               </button>
             </form>

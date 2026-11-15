@@ -4,6 +4,7 @@ import re
 from datetime import date, datetime, timedelta
 import db
 import llm
+import toolkit
 
 TYPE_WEIGHT = {
     "exam": 25,
@@ -29,17 +30,20 @@ def extract_task(text):
     raw = llm.chat([{"role": "user", "content": prompt}], temperature=0)
     found = re.findall(r"\{[^{}]*\}", raw, re.DOTALL)
     if not found:
-        # Fallback keyword parser
         return {
             "title": text.strip()[:60],
             "due_date": (date.today() + timedelta(days=2)).isoformat(),
             "type": "assignment",
         }
-    data = json.loads(found[-1])
     try:
+        data = json.loads(found[-1])
         datetime.strptime(data["due_date"], "%Y-%m-%d")
     except Exception:
-        data["due_date"] = (date.today() + timedelta(days=1)).isoformat()
+        data = {
+            "title": text.strip()[:60] or "Important Academic Task",
+            "due_date": (date.today() + timedelta(days=2)).isoformat(),
+            "type": "assignment",
+        }
 
     if data.get("type") not in TYPE_WEIGHT:
         data["type"] = "assignment"
@@ -70,14 +74,12 @@ def delete_task(task_id):
 
 
 def replan_missed_tasks():
-    """Finds all overdue tasks, shifts their target focus, and re-sequences priorities."""
     today = date.today()
     with db.conn() as c:
         overdue = c.execute(
             "SELECT * FROM tasks WHERE done=0 AND due_date < ?", (today.isoformat(),)
         ).fetchall()
         for t in overdue:
-            # Reschedule overdue tasks to today or tomorrow with an alert
             new_date = today.isoformat()
             c.execute(
                 "UPDATE tasks SET due_date=?, priority_override=99 WHERE id=?",
@@ -133,8 +135,13 @@ def plan_today():
 
     items.sort(key=lambda x: -x["priority"])
 
+    # Check holiday status for today
+    holiday_info = toolkit.is_holiday(today.isoformat())
+
     burnout_score = last_checkin["score"] if last_checkin else 25
-    if last_checkin is None:
+    if holiday_info["is_holiday"]:
+        tip = f"🎉 Today is a College Holiday: '{holiday_info['name']}'! No classes scheduled. Recharge or study at your own pace."
+    elif last_checkin is None:
         tip = "⚡ Welcome to ScholarIQ! Complete a 30-second wellness check-in to dynamically tune your daily workload."
     elif burnout_score >= 65:
         tip = "⚠️ High burnout risk detected! Chrono-Regulator has compressed your day: focus on top 2 priorities and defer the rest."
@@ -144,47 +151,17 @@ def plan_today():
     else:
         tip = "🔥 High stamina day! Clear your hardest academic assignments first while focus is peak."
 
-    # Also fetch today's timetable
+    # Today's timetable
     day_name = today.strftime("%A")
-    today_classes, clashes = get_timetable_for_day(day_name)
+    tt_result = toolkit.get_timetable_for_day(day_name, today.isoformat())
 
     return {
         "items": items,
         "tip": tip,
         "burnout_score": burnout_score,
         "burnout_level": last_checkin["level"] if last_checkin else "Low",
-        "timetable": today_classes,
-        "clashes": clashes,
+        "is_holiday": tt_result["is_holiday"],
+        "holiday_name": tt_result.get("holiday_name", ""),
+        "timetable": tt_result["classes"],
+        "clashes": tt_result["clashes"],
     }
-
-
-def get_timetable_for_day(day_name):
-    with db.conn() as c:
-        classes = [
-            dict(r)
-            for r in c.execute(
-                "SELECT * FROM timetable WHERE day_of_week=? ORDER BY start_time",
-                (day_name,),
-            ).fetchall()
-        ]
-
-    # Detect clashes
-    clashes = []
-    for i in range(len(classes)):
-        for j in range(i + 1, len(classes)):
-            c1, c2 = classes[i], classes[j]
-            # Simple overlap check: c1 start < c2 end and c2 start < c1 end
-            if c1["start_time"] < c2["end_time"] and c2["start_time"] < c1["end_time"]:
-                clashes.append(f"Clash between {c1['subject']} ({c1['start_time']}) and {c2['subject']} ({c2['start_time']})")
-
-    return classes, clashes
-
-
-def add_timetable_class(day_of_week, subject, start_time, end_time, room, professor, type_="Lecture"):
-    with db.conn() as c:
-        c.execute(
-            """INSERT INTO timetable(day_of_week, subject, start_time, end_time, room, professor, type)
-               VALUES(?,?,?,?,?,?,?)""",
-            (day_of_week, subject, start_time, end_time, room, professor, type_),
-        )
-    return {"ok": True}

@@ -38,6 +38,17 @@ def _migrate(c):
         if col_name not in existing_tasks:
             c.execute(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}")
 
+    # Check attendance columns
+    existing_attendance = [col[1] for col in c.execute("PRAGMA table_info(attendance)").fetchall()]
+    new_attendance_cols = [
+        ("short_code", "TEXT DEFAULT ''"),
+        ("color", "TEXT DEFAULT '#a855f7'"),
+        ("total_semester", "INTEGER DEFAULT 60"),
+    ]
+    for col_name, col_type in new_attendance_cols:
+        if col_name not in existing_attendance:
+            c.execute(f"ALTER TABLE attendance ADD COLUMN {col_name} {col_type}")
+
 
 def init():
     with conn() as c:
@@ -95,6 +106,20 @@ def init():
                 type TEXT DEFAULT 'Lecture'
             );
 
+            CREATE TABLE IF NOT EXISTS holidays(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT UNIQUE,
+                name TEXT,
+                type TEXT DEFAULT 'Public Holiday'
+            );
+
+            CREATE TABLE IF NOT EXISTS academic_calendars(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename TEXT,
+                description TEXT,
+                uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+
             CREATE TABLE IF NOT EXISTS github_repos(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 owner TEXT,
@@ -112,9 +137,21 @@ def init():
             CREATE TABLE IF NOT EXISTS attendance(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 subject TEXT UNIQUE,
+                short_code TEXT DEFAULT '',
+                color TEXT DEFAULT '#a855f7',
                 attended INTEGER DEFAULT 0,
                 total INTEGER DEFAULT 0,
+                total_semester INTEGER DEFAULT 60,
                 target_pct REAL DEFAULT 75.0
+            );
+
+            CREATE TABLE IF NOT EXISTS attendance_logs(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject_id INTEGER,
+                date TEXT,
+                mark TEXT, -- 'P' (Present), 'A' (Absent), 'C' (No Class / Cancelled)
+                note TEXT DEFAULT '',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
 
             CREATE TABLE IF NOT EXISTS habits(
@@ -167,29 +204,45 @@ def _seed_defaults(c):
             """INSERT INTO timetable(day_of_week, subject, start_time, end_time, room, professor, type)
                VALUES(?,?,?,?,?,?,?)""",
             [
-                ("Monday", "Distributed Systems & Cloud", "09:00", "10:30", "Lab 302", "Dr. Sharma", "Lab"),
-                ("Monday", "Design & Analysis of Algorithms", "11:00", "12:30", "Hall A", "Prof. Verma", "Lecture"),
-                ("Monday", "Machine Learning & Neural Nets", "14:00", "15:30", "Room 405", "Dr. Iyer", "Lecture"),
-                ("Tuesday", "Database Engineering", "10:00", "11:30", "Room 201", "Prof. Reddy", "Lecture"),
-                ("Tuesday", "Computer Networks", "13:00", "14:30", "Lab 104", "Dr. Rao", "Lab"),
-                ("Wednesday", "Operating Systems", "09:30", "11:00", "Hall B", "Dr. Joshi", "Lecture"),
-                ("Wednesday", "Full Stack Web Arch", "14:00", "16:00", "Innovation Lab", "Prof. Kulkarni", "Lab"),
-                ("Thursday", "Design & Analysis of Algorithms", "11:00", "12:30", "Hall A", "Prof. Verma", "Lecture"),
-                ("Thursday", "Distributed Systems", "14:00", "15:30", "Room 302", "Dr. Sharma", "Lecture"),
-                ("Friday", "Compiler Design", "09:00", "10:30", "Room 401", "Dr. Nair", "Lecture"),
+                ("Monday", "AI Assisted Problem Solving using Python", "08:30", "09:30", "Room 8008", "Dr. Anupam", "Lecture"),
+                ("Monday", "Calculus and Differential Equations", "09:45", "10:45", "Hall A", "Prof. Verma", "Lecture"),
+                ("Monday", "Applied Physics Lab", "11:00", "13:00", "Physics Lab 2", "Dr. Rao", "Practical"),
+                ("Tuesday", "Computational Biology", "10:00", "11:30", "Room 10104", "Dr. Iyer", "Lecture"),
+                ("Tuesday", "Heritage, Democracy and Ecology", "13:00", "14:30", "Hall B", "Prof. Reddy", "Lecture"),
+                ("Wednesday", "AI Python Hands-on Lab", "09:30", "11:30", "Lab 302", "Dr. Anupam", "Practical"),
+                ("Wednesday", "Calculus Tutorial", "14:00", "15:00", "Hall A", "Prof. Verma", "Tutorial"),
+                ("Thursday", "Applied Physics Theory", "11:00", "12:30", "Hall A", "Dr. Rao", "Lecture"),
+                ("Thursday", "Computational Biology Lab", "14:00", "16:00", "Bio Lab 1", "Dr. Iyer", "Practical"),
+                ("Friday", "Heritage & Democracy", "09:00", "10:30", "Room 401", "Prof. Reddy", "Lecture"),
                 ("Friday", "Minor Project Review", "14:00", "16:30", "Auditorium", "Panel", "Project"),
             ],
         )
 
+    # Seed initial attendance
     if c.execute("SELECT COUNT(*) FROM attendance").fetchone()[0] == 0:
         c.executemany(
-            """INSERT INTO attendance(subject, attended, total, target_pct) VALUES(?,?,?,?)""",
+            """INSERT INTO attendance(subject, short_code, color, attended, total, total_semester, target_pct)
+               VALUES(?,?,?,?,?,?,?)""",
             [
-                ("Design & Analysis of Algorithms", 28, 32, 75.0),
-                ("Distributed Systems", 22, 28, 75.0),
-                ("Machine Learning", 18, 26, 75.0),
-                ("Database Engineering", 25, 30, 75.0),
-                ("Computer Networks", 19, 24, 75.0),
+                ("AI Assisted Problem Solving using Python", "AI Python", "#8A4FE0", 37, 47, 72, 75.0),
+                ("Calculus and Differential Equations", "Calculus", "#E0473D", 26, 31, 48, 75.0),
+                ("Applied Physics", "Physics", "#3B6FF0", 34, 40, 60, 75.0),
+                ("Computational Biology", "Comp Bio", "#22A55A", 36, 40, 60, 75.0),
+                ("Heritage, Democracy and Ecology", "Heritage", "#F0902B", 18, 25, 36, 75.0),
+            ],
+        )
+
+    # Seed sample holidays
+    if c.execute("SELECT COUNT(*) FROM holidays").fetchone()[0] == 0:
+        c.executemany(
+            """INSERT OR IGNORE INTO holidays(date, name, type) VALUES(?,?,?)""",
+            [
+                ("2026-10-02", "Gandhi Jayanti", "National Holiday"),
+                ("2026-10-31", "Diwali Festival", "Holiday"),
+                ("2026-11-01", "Diwali Balipratipada", "Holiday"),
+                ("2026-11-15", "Sunday / Weekend Break", "Weekend"),
+                ("2026-11-20", "University Sports Fest", "College Event"),
+                ("2026-12-25", "Christmas Day", "Public Holiday"),
             ],
         )
 

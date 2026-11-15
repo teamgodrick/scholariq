@@ -41,19 +41,20 @@ export default function Chat() {
     loadDocs();
   }, []);
 
+  // Multi-file upload handler
   async function upload(e) {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
     setBusy(true);
     setError("");
     try {
-      const r = await api.ingest(file);
+      const r = await api.ingest(files);
       loadDocs();
       setMsgs((m) => [
         ...m,
         {
           role: "ai",
-          text: `📄 Ingested "${r.doc}" successfully! Split into ${r.chunks} chunks and indexed in local ChromaDB-compatible vector memory. You can now ask any question with exact page citations.`,
+          text: `📄 Ingested ${r.count} document(s) successfully! Total ${r.total_chunks} sections indexed. You can now ask any question with exact page citations.`,
         },
       ]);
     } catch (err) {
@@ -142,7 +143,7 @@ export default function Chat() {
   function toggleVoiceInput() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert("Voice input is not supported in this browser. Please use Chrome/Edge.");
+      alert("Voice input is supported in Chrome, Edge, and Safari.");
       return;
     }
     if (isListening) {
@@ -172,39 +173,45 @@ export default function Chat() {
 
   return (
     <div className="chat-page">
-      <header className="page-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px" }}>
+      <header className="page-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px" }}>
         <div>
           <h1>Prof. Pilot</h1>
-          <p className="muted">
-            Ground-truth academic copilot. Answers strictly from your uploaded syllabus and notes with page citations.
+          <p className="muted small">
+            Answers strictly from your uploaded syllabus and notes with page citations. Works on any laptop.
           </p>
         </div>
-        <span className="privacy-badge">🔒 100% Offline • Llama 3.2 8B</span>
+        <span className="privacy-badge">🔒 Private Academic RAG</span>
       </header>
 
       {error && <p className="alert" role="alert">{error}</p>}
 
-      {/* PDF Uploader Card */}
+      {/* Multi-PDF Uploader Card */}
       <div className="uploader">
-        <input ref={fileRef} type="file" accept="application/pdf" onChange={upload} hidden />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/pdf"
+          multiple
+          onChange={upload}
+          hidden
+        />
         <button className="primary" onClick={() => fileRef.current.click()} disabled={busy}>
-          📤 Drop / Upload Syllabus PDF
+          📤 Upload Syllabus PDFs (Select Multiple)
         </button>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <span className="small muted">
             {docs.length > 0 ? (
-              <span style={{ display: "inline-flex", gap: "8px", flexWrap: "wrap" }}>
+              <span style={{ display: "inline-flex", gap: "6px", flexWrap: "wrap" }}>
                 {docs.map((d) => (
                   <span
                     key={d.doc}
                     className="chip"
-                    style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
                   >
-                    📚 {d.doc} ({d.chunks} chunks, {d.pages} pp)
+                    📚 {d.doc} ({d.chunks} chunks)
                     <button
                       onClick={() => deleteDoc(d.doc)}
-                      style={{ background: "none", border: 0, color: "#fca5a5", cursor: "pointer", fontSize: "12px" }}
-                      title="Remove from vector store"
+                      style={{ background: "none", border: 0, color: "#fca5a5", cursor: "pointer", fontSize: "11px", marginLeft: "4px" }}
+                      title="Remove document"
                     >
                       ✕
                     </button>
@@ -212,7 +219,7 @@ export default function Chat() {
                 ))}
               </span>
             ) : (
-              "No notes uploaded yet. Add lecture slides, lab manuals or syllabus PDFs to index."
+              "Upload multiple PDFs at once (syllabus, lecture slides, lab manuals)."
             )}
           </span>
         </div>
@@ -232,18 +239,23 @@ export default function Chat() {
       </div>
 
       {/* Quick Prompts Row */}
-      <div className="quick-prompts">
+      <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "6px", marginBottom: "10px" }}>
         {QUICK_PROMPTS.map((p, idx) => (
-          <button key={idx} className="quick-pill" onClick={() => handleSend(p)}>
+          <button
+            key={idx}
+            className="ghost"
+            style={{ fontSize: "11.5px", padding: "4px 10px", whiteSpace: "nowrap" }}
+            onClick={() => handleSend(p)}
+          >
             ⚡ {p}
           </button>
         ))}
       </div>
 
       {/* Active Recall Flashcards Mode */}
-      {mode === "flashcards" && flashcards.length > 0 ? (
-        <div style={{ margin: "20px 0" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+      {mode === "flashcards" && flashcards.length > 0 && (
+        <div style={{ margin: "16px 0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
             <h3>Flashcard {currentCardIdx + 1} of {flashcards.length}</h3>
             <span className="muted small">Click card to reveal answer</span>
           </div>
@@ -251,14 +263,14 @@ export default function Chat() {
             className="flashcard"
             onClick={() => setCardFlipped(!cardFlipped)}
           >
-            <span style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.1em", color: "#a855f7", marginBottom: "8px" }}>
+            <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.1em", color: "#a855f7", marginBottom: "6px" }}>
               {cardFlipped ? "Answer" : "Question"}
             </span>
-            <p style={{ fontSize: "17px", fontWeight: 600, color: "#ffffff", maxWidth: "600px" }}>
+            <p style={{ fontSize: "16px", fontWeight: 600, color: "#ffffff", maxWidth: "600px" }}>
               {cardFlipped ? flashcards[currentCardIdx].answer : flashcards[currentCardIdx].question}
             </p>
           </div>
-          <div style={{ display: "flex", justifyContent: "center", gap: "14px", marginTop: "16px" }}>
+          <div style={{ display: "flex", justifyContent: "center", gap: "12px", marginTop: "12px" }}>
             <button
               className="ghost"
               disabled={currentCardIdx === 0}
@@ -281,16 +293,16 @@ export default function Chat() {
             </button>
           </div>
         </div>
-      ) : null}
+      )}
 
       {/* Chat Thread */}
       <div className="thread" aria-live="polite">
         {msgs.length === 0 && (
-          <div style={{ textAlign: "center", padding: "40px 20px" }}>
-            <div style={{ fontSize: "40px", marginBottom: "10px" }}>🎓</div>
-            <h3>Prof. Pilot is Ready</h3>
-            <p className="muted small" style={{ maxWidth: "450px", margin: "0 auto" }}>
-              Upload your syllabus or lecture slides above, then ask conceptual questions, request exam quizzes, or practice viva voce questions.
+          <div style={{ textAlign: "center", padding: "30px 16px" }}>
+            <div style={{ fontSize: "36px", marginBottom: "8px" }}>🎓</div>
+            <h3>Prof. Pilot Study Copilot</h3>
+            <p className="muted small" style={{ maxWidth: "420px", margin: "0 auto" }}>
+              Select multiple PDFs above to index them. Ask doubts, generate quizzes, or practice oral viva voce questions.
             </p>
           </div>
         )}
@@ -299,32 +311,21 @@ export default function Chat() {
           <div key={i} className={"msg " + m.role}>
             <p>{m.text}</p>
             {m.sources && m.sources.length > 0 && (
-              <div className="sources">
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center", marginTop: "10px", paddingTop: "8px", borderTop: "1px solid var(--line)" }}>
                 <span className="muted small" style={{ fontWeight: 600 }}>Citations:</span>
                 {m.sources.map((s, k) => (
                   <span key={k} className="chip" title={s.snippet}>
                     📄 {s.doc} (p.{s.page})
                   </span>
                 ))}
-                <button
-                  className="ghost"
-                  style={{ marginLeft: "auto", fontSize: "12px", padding: "4px 10px" }}
-                  onClick={() => {
-                    setMode("quiz");
-                    handleSend(m.q || "this topic");
-                  }}
-                  disabled={busy}
-                >
-                  ⚡ Quiz me on this
-                </button>
               </div>
             )}
           </div>
         ))}
         {busy && (
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#c084fc", fontSize: "13px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#c084fc", fontSize: "12.5px" }}>
             <span className="dot on" />
-            <span>Reasoning locally with Llama 3.2 8B...</span>
+            <span>Analyzing course context...</span>
           </div>
         )}
       </div>
@@ -342,11 +343,11 @@ export default function Chat() {
           onChange={(e) => setInput(e.target.value)}
           placeholder={
             mode === "chat"
-              ? "Ask a doubt from your notes (e.g. 'What is ACID in DBMS?')"
+              ? "Ask a doubt from your notes (e.g. 'What is Raft consensus?')"
               : mode === "quiz"
-              ? "Enter subject or topic for exam quiz..."
+              ? "Enter topic for exam quiz..."
               : mode === "viva"
-              ? "Enter topic for mock viva voce examination..."
+              ? "Enter topic for mock viva voce drill..."
               : mode === "flashcards"
               ? "Enter topic to generate flashcards..."
               : "Enter topic for rapid revision summary..."
@@ -357,12 +358,12 @@ export default function Chat() {
           type="button"
           className={`mic-btn ${isListening ? "listening" : ""}`}
           onClick={toggleVoiceInput}
-          title={isListening ? "Listening... click to stop" : "Voice input (Speech to text)"}
+          title="Voice input (Speech to text)"
         >
           🎙️
         </button>
         <button className="primary" type="submit" disabled={busy || !input.trim()}>
-          {busy ? "Thinking..." : "Send"}
+          {busy ? "..." : "Send"}
         </button>
       </form>
     </div>

@@ -1,7 +1,8 @@
-"""Academic Toolkit: 75% Attendance Safe-to-Skip, Habit Streaks, Budget & Exam Mode."""
+"""Academic Toolkit: Attendance (P/A/C), Safe-to-Skip, Holidays, Timetable, Habits, Budget, Exam Mode."""
 import math
 from datetime import date, datetime, timedelta
 import calendar
+import re
 import db
 import llm
 
@@ -9,7 +10,7 @@ import llm
 # -------------------- ATTENDANCE & 75% SAFE-TO-SKIP --------------------
 def get_attendance():
     with db.conn() as c:
-        rows = c.execute("SELECT * FROM attendance ORDER BY subject").fetchall()
+        rows = c.execute("SELECT * FROM attendance ORDER BY id").fetchall()
     results = []
     for r in rows:
         att = r["attended"]
@@ -17,62 +18,211 @@ def get_attendance():
         target = r["target_pct"] if r["target_pct"] else 75.0
         pct = round((att / tot * 100), 1) if tot > 0 else 100.0
 
-        if pct >= target:
-            # How many more can skip?
-            # (att) / (tot + S) >= target/100  =>  att >= (target/100)*(tot + S)
-            # S <= (att / (target/100)) - tot
-            safe_to_skip = math.floor((att / (target / 100.0)) - tot)
+        if tot == 0:
+            safe_to_skip = 0
+            needed = 0
+            status_text = "No classes held yet."
+            is_safe = True
+        elif pct >= target:
+            # Safe to skip formula from the-thing: Math.floor((att * 100) / target) - tot
+            safe_to_skip = math.floor((att * 100.0) / target) - tot
             safe_to_skip = max(0, safe_to_skip)
-            status_text = f"Safe to skip {safe_to_skip} class(es)" if safe_to_skip > 0 else "On the border (cannot skip)"
+            status_text = f"Safe to skip {safe_to_skip} class(es)" if safe_to_skip > 0 else "Borderline (attend next class)"
+            needed = 0
             is_safe = True
         else:
-            # How many consecutive classes needed?
-            # (att + C) / (tot + C) >= target/100
-            # att + C >= (target/100)*tot + (target/100)*C
-            # C * (1 - target/100) >= (target/100)*tot - att
-            needed = math.ceil(((target / 100.0) * tot - att) / (1.0 - (target / 100.0)))
+            # Needed consecutive formula from the-thing: Math.ceil(((target * tot) - (att * 100)) / (100 - target))
+            needed = math.ceil(((target * tot) - (att * 100.0)) / (100.0 - target))
             needed = max(1, needed)
             safe_to_skip = 0
-            status_text = f"Needs {needed} consecutive class(es)"
+            status_text = f"Deficit: Attend {needed} consecutive class(es)"
             is_safe = False
 
         results.append({
             "id": r["id"],
             "subject": r["subject"],
+            "short_code": r["short_code"] or r["subject"][:12],
+            "color": r["color"] or "#a855f7",
             "attended": att,
             "total": tot,
+            "total_semester": r["total_semester"] or 60,
             "percentage": pct,
             "target_pct": target,
             "safe_to_skip": safe_to_skip,
-            "needed_consecutive": 0 if is_safe else needed,
+            "needed_consecutive": needed,
             "status_text": status_text,
             "is_safe": is_safe,
         })
     return results
 
 
-def update_attendance(subject, attended, total, target_pct=75.0):
+def add_subject(subject, short_code="", color="#a855f7", attended=0, total=0, total_semester=60, target_pct=75.0):
     with db.conn() as c:
         c.execute(
-            """INSERT INTO attendance(subject, attended, total, target_pct)
-               VALUES(?,?,?,?)
-               ON CONFLICT(subject) DO UPDATE SET attended=?, total=?, target_pct=?""",
-            (subject, attended, total, target_pct, attended, total, target_pct),
+            """INSERT INTO attendance(subject, short_code, color, attended, total, total_semester, target_pct)
+               VALUES(?,?,?,?,?,?,?)""",
+            (subject, short_code or subject[:12], color, attended, total, total_semester, target_pct),
         )
     return get_attendance()
 
 
-def mark_class_attendance(subject, attended=True):
+def edit_subject(subject_id, subject, short_code, color, attended, total, total_semester, target_pct=75.0):
     with db.conn() as c:
-        row = c.execute("SELECT * FROM attendance WHERE subject=?", (subject,)).fetchone()
+        c.execute(
+            """UPDATE attendance
+               SET subject=?, short_code=?, color=?, attended=?, total=?, total_semester=?, target_pct=?
+               WHERE id=?""",
+            (subject, short_code, color, attended, total, total_semester, target_pct, subject_id),
+        )
+    return get_attendance()
+
+
+def delete_subject(subject_id):
+    with db.conn() as c:
+        c.execute("DELETE FROM attendance WHERE id=?", (subject_id,))
+        c.execute("DELETE FROM attendance_logs WHERE subject_id=?", (subject_id,))
+    return get_attendance()
+
+
+def mark_class_attendance(subject_id, mark="P", note=""):
+    """
+    Mark:
+    - 'P': Present (+1 attended, +1 total)
+    - 'A': Absent (+0 attended, +1 total)
+    - 'C': No class / cancelled / holiday (+0 attended, +0 total - neutral, does not hurt percentage!)
+    """
+    today_str = date.today().isoformat()
+    with db.conn() as c:
+        row = c.execute("SELECT * FROM attendance WHERE id=?", (subject_id,)).fetchone()
         if row:
-            new_att = row["attended"] + (1 if attended else 0)
-            new_tot = row["total"] + 1
+            att = row["attended"]
+            tot = row["total"]
+            if mark == "P":
+                att += 1
+                tot += 1
+            elif mark == "A":
+                tot += 1
+            # If mark == 'C' (No class), neither changes
+
             c.execute(
-                "UPDATE attendance SET attended=?, total=? WHERE subject=?",
-                (new_att, new_tot, subject),
+                "UPDATE attendance SET attended=?, total=? WHERE id=?",
+                (att, tot, subject_id),
+            )
+            c.execute(
+                "INSERT INTO attendance_logs(subject_id, date, mark, note) VALUES(?,?,?,?)",
+                (subject_id, today_str, mark, note),
             )
     return get_attendance()
+
+
+# -------------------- HOLIDAYS & ACADEMIC CALENDAR --------------------
+def get_holidays():
+    with db.conn() as c:
+        rows = c.execute("SELECT * FROM holidays ORDER BY date").fetchall()
+    return [dict(r) for r in rows]
+
+
+def add_holiday(date_str, name, type_="Holiday"):
+    with db.conn() as c:
+        c.execute(
+            "INSERT OR REPLACE INTO holidays(date, name, type) VALUES(?,?,?)",
+            (date_str, name, type_),
+        )
+    return get_holidays()
+
+
+def delete_holiday(holiday_id):
+    with db.conn() as c:
+        c.execute("DELETE FROM holidays WHERE id=?", (holiday_id,))
+    return get_holidays()
+
+
+def is_holiday(date_str=None):
+    if not date_str:
+        date_str = date.today().isoformat()
+    with db.conn() as c:
+        row = c.execute("SELECT * FROM holidays WHERE date=?", (date_str,)).fetchone()
+        if row:
+            return {"is_holiday": True, "name": row["name"], "type": row["type"], "date": row["date"]}
+    return {"is_holiday": False}
+
+
+def parse_academic_calendar(text):
+    """Parses text or syllabus for dates and holidays."""
+    # Look for patterns like "26 Jan - Republic Day" or "2026-10-31 Diwali"
+    lines = text.split("\n")
+    found_count = 0
+    with db.conn() as c:
+        for line in lines:
+            line = line.strip()
+            # Match YYYY-MM-DD or DD Month format
+            date_match = re.search(r"(\d{4}-\d{2}-\d{2})[:\s-]+([A-Za-z0-9\s,]+)", line)
+            if date_match:
+                d_str = date_match.group(1)
+                h_name = date_match.group(2).strip()
+                c.execute("INSERT OR REPLACE INTO holidays(date, name, type) VALUES(?,?,?)", (d_str, h_name, "Calendar Holiday"))
+                found_count += 1
+    return {"imported": found_count, "holidays": get_holidays()}
+
+
+# -------------------- TIMETABLE MANAGEMENT --------------------
+def get_timetable_for_day(day_name=None, date_str=None):
+    if not date_str:
+        date_str = date.today().isoformat()
+    if not day_name:
+        day_name = date.fromisoformat(date_str).strftime("%A")
+
+    holiday_info = is_holiday(date_str)
+    if holiday_info["is_holiday"]:
+        return {
+            "day": day_name,
+            "date": date_str,
+            "is_holiday": True,
+            "holiday_name": holiday_info["name"],
+            "classes": [],
+            "clashes": [],
+        }
+
+    with db.conn() as c:
+        classes = [
+            dict(r)
+            for r in c.execute(
+                "SELECT * FROM timetable WHERE day_of_week=? ORDER BY start_time",
+                (day_name,),
+            ).fetchall()
+        ]
+
+    # Detect clashes
+    clashes = []
+    for i in range(len(classes)):
+        for j in range(i + 1, len(classes)):
+            c1, c2 = classes[i], classes[j]
+            if c1["start_time"] < c2["end_time"] and c2["start_time"] < c1["end_time"]:
+                clashes.append(f"Clash between {c1['subject']} ({c1['start_time']}) and {c2['subject']} ({c2['start_time']})")
+
+    return {
+        "day": day_name,
+        "date": date_str,
+        "is_holiday": False,
+        "classes": classes,
+        "clashes": clashes,
+    }
+
+
+def add_timetable_entry(day_of_week, subject, start_time, end_time, room, professor, type_="Lecture"):
+    with db.conn() as c:
+        c.execute(
+            """INSERT INTO timetable(day_of_week, subject, start_time, end_time, room, professor, type)
+               VALUES(?,?,?,?,?,?,?)""",
+            (day_of_week, subject, start_time, end_time, room, professor, type_),
+        )
+    return get_timetable_for_day(day_of_week)
+
+
+def delete_timetable_entry(entry_id, day_of_week="Monday"):
+    with db.conn() as c:
+        c.execute("DELETE FROM timetable WHERE id=?", (entry_id,))
+    return get_timetable_for_day(day_of_week)
 
 
 # -------------------- HABIT & ROUTINE COACH --------------------
@@ -100,13 +250,11 @@ def toggle_habit(habit_id):
             return get_habits()
         completed = row["last_completed_date"] == today
         if completed:
-            # Uncheck
             c.execute(
                 "UPDATE habits SET last_completed_date=NULL, completed_today=0 WHERE id=?",
                 (habit_id,),
             )
         else:
-            # Mark complete and increment streak
             new_streak = row["streak"] + 1
             c.execute(
                 "UPDATE habits SET last_completed_date=?, completed_today=1, streak=? WHERE id=?",
@@ -127,7 +275,6 @@ def add_habit(title, category="Study"):
 # -------------------- HOSTEL BUDGET TRACKER --------------------
 def get_budget():
     today = date.today()
-    # Calculate days remaining in current month
     days_in_month = calendar.monthrange(today.year, today.month)[1]
     days_left = max(1, days_in_month - today.day + 1)
 
@@ -137,7 +284,7 @@ def get_budget():
     total_spent = sum(r["amount"] for r in expenses if r["type"] == "expense")
     total_allowance = sum(r["amount"] for r in expenses if r["type"] == "allowance")
     if total_allowance == 0:
-        total_allowance = 6000.0  # standard monthly student baseline
+        total_allowance = 6000.0
 
     remaining = max(0.0, total_allowance - total_spent)
     daily_safe_spend = round(remaining / days_left, 1)
@@ -187,7 +334,6 @@ def generate_exam_plan(subject, exam_date_str, topics_str):
     if not topics:
         topics = ["Core Theory & Formulas", "Previous Year Questions", "Unit 1 & 2 Review", "Viva Preparation"]
 
-    # Prompt LLM for structured revision breakdown
     prompt = (
         f"Subject: {subject}\n"
         f"Days remaining until Exam: {days_until} days (Exam on {exam_dt.isoformat()})\n"
@@ -195,7 +341,7 @@ def generate_exam_plan(subject, exam_date_str, topics_str):
         "Generate a high-intensity, stress-minimized day-by-day revision roadmap for an engineering student. "
         "Divide the remaining days into: Stage 1 (Deep Concept Grasp), Stage 2 (Problem Solving & PYQ drill), "
         "and Final Stage (Formula Sheet & High-Yield Mock test). "
-        "Keep it actionable, encouraging, and formatted clearly with day tags like [Day 1], [Day 2], etc."
+        "Format clearly with day tags like [Day 1], [Day 2], etc."
     )
     plan_text = llm.chat([
         {"role": "system", "content": "You are a master engineering exam strategist."},
