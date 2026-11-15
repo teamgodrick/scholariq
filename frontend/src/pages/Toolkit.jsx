@@ -54,10 +54,6 @@ export default function Toolkit() {
   const [expenseForm, setExpenseForm] = useState({ title: "", amount: "", category: "Food" });
   const [habitTitle, setHabitTitle] = useState("");
 
-  // Upload States for Calendar & Timetable
-  const [uploadingCal, setUploadingCal] = useState(false);
-  const [uploadingTt, setUploadingTt] = useState(false);
-
   // Editable Habit State
   const [editingHabit, setEditingHabit] = useState(null);
 
@@ -246,38 +242,6 @@ export default function Toolkit() {
       setNote("Expense logged!");
     } catch (err) {
       setError(err.message);
-    }
-  }
-
-  async function handleCalendarUpload(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    setUploadingCal(true);
-    try {
-      const res = await api.uploadCalendar(file);
-      setHolidays(res.holidays || []);
-      setNote(`🎉 Extracted and scheduled ${res.imported || 0} events/holidays from ${file.name}!`);
-    } catch (err) {
-      setError("Calendar file upload failed: " + err.message);
-    } finally {
-      setUploadingCal(false);
-      e.target.value = "";
-    }
-  }
-
-  async function handleTimetableUpload(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    setUploadingTt(true);
-    try {
-      const res = await api.uploadTimetable(file);
-      loadTimetable(timetableDay);
-      setNote(`📅 Extracted ${res.imported || 0} class slots from ${file.name}!`);
-    } catch (err) {
-      setError("Timetable file upload failed: " + err.message);
-    } finally {
-      setUploadingTt(false);
-      e.target.value = "";
     }
   }
 
@@ -664,52 +628,6 @@ export default function Toolkit() {
               On holidays, the system displays a celebratory pop-up and suspends all class schedules for that day.
             </p>
 
-            {/* Upload PDF / JPEG / JPG Academic Calendar */}
-            <div
-              style={{
-                margin: "14px 0",
-                padding: "14px",
-                background: "rgba(147, 51, 234, 0.12)",
-                border: "1px dashed var(--purple-bright)",
-                borderRadius: "10px",
-                display: "flex",
-                flexDirection: "column",
-                gap: "8px",
-              }}
-            >
-              <div>
-                <strong style={{ color: "#ffffff", fontSize: "13.5px" }}>📤 Upload Academic Calendar (PDF / Image)</strong>
-                <p className="muted small" style={{ margin: "2px 0 0" }}>
-                  Upload official college calendar (.pdf, .jpg, .jpeg, .png) to auto-extract all holidays & exam dates.
-                </p>
-              </div>
-              <label
-                className="ghost"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "8px",
-                  cursor: "pointer",
-                  padding: "8px 12px",
-                  background: "rgba(26, 13, 51, 0.8)",
-                  borderColor: "var(--purple-bright)",
-                  color: "#f3e8ff",
-                  fontWeight: 600,
-                  fontSize: "12.5px",
-                }}
-              >
-                <span>{uploadingCal ? "⏳ Reading & Extracting Calendar..." : "📁 Choose Calendar PDF / Image to Auto-Read"}</span>
-                <input
-                  type="file"
-                  accept=".pdf, .png, .jpg, .jpeg"
-                  disabled={uploadingCal}
-                  onChange={handleCalendarUpload}
-                  style={{ display: "none" }}
-                />
-              </label>
-            </div>
-
             {/* Paste / Attach Academic Calendar */}
             <form onSubmit={handleParseCalendar} style={{ margin: "14px 0" }}>
               <label>
@@ -786,54 +704,8 @@ export default function Toolkit() {
           <div className="panel" style={{ minWidth: 0 }}>
             <h2>Weekly Timetable Manager</h2>
             <p className="muted small">
-              Customize periods and lectures for each day of the week or upload your schedule.
+              Customize periods and lectures for each day of the week.
             </p>
-
-            {/* Upload PDF / JPEG / JPG Timetable */}
-            <div
-              style={{
-                margin: "12px 0",
-                padding: "12px",
-                background: "rgba(99, 102, 241, 0.12)",
-                border: "1px dashed var(--indigo)",
-                borderRadius: "10px",
-                display: "flex",
-                flexDirection: "column",
-                gap: "8px",
-              }}
-            >
-              <div>
-                <strong style={{ color: "#ffffff", fontSize: "13.5px" }}>📤 Upload Class Timetable (PDF / Image)</strong>
-                <p className="muted small" style={{ margin: "2px 0 0" }}>
-                  Upload your semester schedule (.pdf, .jpg, .jpeg, .png) to auto-populate class periods.
-                </p>
-              </div>
-              <label
-                className="ghost"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "8px",
-                  cursor: "pointer",
-                  padding: "8px 12px",
-                  background: "rgba(26, 13, 51, 0.8)",
-                  borderColor: "var(--indigo)",
-                  color: "#f3e8ff",
-                  fontWeight: 600,
-                  fontSize: "12.5px",
-                }}
-              >
-                <span>{uploadingTt ? "⏳ Reading & Extracting Timetable..." : "📁 Choose Timetable PDF or Image"}</span>
-                <input
-                  type="file"
-                  accept=".pdf, .png, .jpg, .jpeg"
-                  disabled={uploadingTt}
-                  onChange={handleTimetableUpload}
-                  style={{ display: "none" }}
-                />
-              </label>
-            </div>
 
             {/* Day Selector */}
             <div style={{ display: "flex", gap: "4px", margin: "10px 0", flexWrap: "wrap" }}>

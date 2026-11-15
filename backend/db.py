@@ -13,14 +13,9 @@ def conn():
 
 
 def _migrate(c):
-<<<<<<< HEAD
-    """Safely adds newly required columns to existing tables."""
-    try:
-        # Check checkins columns
-=======
     """Safely adds newly required columns to existing tables without ever crashing."""
     try:
->>>>>>> 326ff7aac1cbd208ccc97de8bfa435309de8165e
+        # Check checkins columns
         existing_checkins = [col[1] for col in c.execute("PRAGMA table_info(checkins)").fetchall()]
         new_checkins_cols = [
             ("level", "TEXT DEFAULT 'Low'"),
@@ -36,15 +31,11 @@ def _migrate(c):
                     c.execute(f"ALTER TABLE checkins ADD COLUMN {col_name} {col_type}")
                 except Exception:
                     pass
-<<<<<<< HEAD
-
-        # Check tasks columns
-=======
     except Exception:
         pass
 
     try:
->>>>>>> 326ff7aac1cbd208ccc97de8bfa435309de8165e
+        # Check tasks columns
         existing_tasks = [col[1] for col in c.execute("PRAGMA table_info(tasks)").fetchall()]
         new_tasks_cols = [
             ("priority_override", "INTEGER DEFAULT NULL"),
@@ -56,15 +47,11 @@ def _migrate(c):
                     c.execute(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}")
                 except Exception:
                     pass
-<<<<<<< HEAD
-
-        # Check attendance columns
-=======
     except Exception:
         pass
 
     try:
->>>>>>> 326ff7aac1cbd208ccc97de8bfa435309de8165e
+        # Check attendance columns
         existing_attendance = [col[1] for col in c.execute("PRAGMA table_info(attendance)").fetchall()]
         new_attendance_cols = [
             ("short_code", "TEXT DEFAULT ''"),
@@ -77,13 +64,8 @@ def _migrate(c):
                     c.execute(f"ALTER TABLE attendance ADD COLUMN {col_name} {col_type}")
                 except Exception:
                     pass
-<<<<<<< HEAD
-    except Exception as e:
-        print(f"[Migration Notice] Migration completed with notice: {e}")
-=======
     except Exception:
         pass
->>>>>>> 326ff7aac1cbd208ccc97de8bfa435309de8165e
 
 
 def init():

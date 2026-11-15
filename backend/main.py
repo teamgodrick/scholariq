@@ -442,18 +442,6 @@ def remove_budget(entry_id: int):
     return toolkit.delete_budget_entry(entry_id)
 
 
-@app.post("/calendar/upload")
-async def upload_calendar_file(file: UploadFile = File(...)):
-    contents = await file.read()
-    return toolkit.parse_calendar_file(contents, file.filename)
-
-
-@app.post("/timetable/upload")
-async def upload_timetable_file(file: UploadFile = File(...)):
-    contents = await file.read()
-    return toolkit.parse_timetable_file(contents, file.filename)
-
-
 @app.post("/exam/plan")
 def exam_plan(p: ExamPlanPayload):
     return llm_guard(toolkit.generate_exam_plan, p.subject, p.exam_date, p.topics)

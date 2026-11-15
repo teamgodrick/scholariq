@@ -49,16 +49,6 @@ export const api = {
   addHoliday: (data) => req("/holidays", post(data)),
   deleteHoliday: (id) => req(`/holidays/${id}`, { method: "DELETE" }),
   parseCalendar: (text) => req("/calendar/parse", post({ text })),
-  uploadCalendar: (file) => {
-    const form = new FormData();
-    form.append("file", file);
-    return req("/calendar/upload", { method: "POST", body: form });
-  },
-  uploadTimetable: (file) => {
-    const form = new FormData();
-    form.append("file", file);
-    return req("/timetable/upload", { method: "POST", body: form });
-  },
 
   // Prof. Pilot (Multi-File Ingest & RAG)
   ingest: (files) => {

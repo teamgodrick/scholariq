@@ -29,11 +29,36 @@ SYSTEM_VIVA = (
 )
 
 
-def chunk_text(text, size=800, overlap=120):
-    text = " ".join(text.split())
+def _clean_extracted_text(text):
+    """Deep clean extracted PDF text to avoid stuttered repetitive artifacts."""
+    if not text:
+        return ""
+    # Remove null bytes and non-printable control chars
+    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', text)
+    # Collapse multiple consecutive identical words (e.g. 'Holiday Holiday Holiday Holiday' -> 'Holiday')
+    text = re.sub(r'\b(\w+)(?:\s+\1\b){2,}', r'\1', text, flags=re.IGNORECASE)
+    # Collapse identical short phrases repeated (e.g. 'Guru Nanak Jayanti Holiday: Guru Nanak Jayanti Holiday:')
+    text = re.sub(r'(\b[A-Za-z0-9\s]{3,30}:)(?:\s*\1){2,}', r'\1', text, flags=re.IGNORECASE)
+    # Normalize excessive spaces and tabs
+    text = re.sub(r'[ \t]+', ' ', text)
+    # Collapse 3+ newlines into 2
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
+def chunk_text(text, size=1500, overlap=300):
+    """Split text into overlapping chunks for RAG indexing with deduplication."""
+    text = _clean_extracted_text(text)
     out, i = [], 0
+    seen = set()
     while i < len(text):
-        out.append(text[i:i + size])
+        chunk = text[i:i + size].strip()
+        if chunk:
+            # Check near-duplicate signature
+            sig = re.sub(r'\s+', ' ', chunk.lower())[:160]
+            if sig not in seen:
+                seen.add(sig)
+                out.append(chunk)
         i += size - overlap
     return out
 
@@ -42,12 +67,23 @@ def ingest_pdf(path, doc_name):
     reader = PdfReader(path)
     pieces = []
     for page_no, page in enumerate(reader.pages, start=1):
-        extracted = page.extract_text() or ""
-        for ch in chunk_text(extracted):
+        raw = page.extract_text() or ""
+        cleaned = _clean_extracted_text(raw)
+        for ch in chunk_text(cleaned):
             if len(ch.strip()) > 35:
                 pieces.append((page_no, ch))
     if not pieces:
         return 0
+
+    # Cross-page deduplication
+    seen = set()
+    unique_pieces = []
+    for page_no, text in pieces:
+        sig = re.sub(r'\s+', ' ', text.lower().strip())[:160]
+        if sig not in seen:
+            seen.add(sig)
+            unique_pieces.append((page_no, text))
+    pieces = unique_pieces
 
     embs = []
     for i in range(0, len(pieces), 16):
@@ -85,7 +121,7 @@ def delete_document(doc_name):
     return {"deleted": doc_name}
 
 
-def search(question, k=4):
+def search(question, k=6):
     with db.conn() as c:
         rows = c.execute("SELECT doc,page,text,emb FROM chunks").fetchall()
     if not rows:
@@ -95,20 +131,30 @@ def search(question, k=4):
     mat = np.vstack([np.frombuffer(r["emb"], dtype=np.float32) for r in rows])
     mat = mat / (np.linalg.norm(mat, axis=1, keepdims=True) + 1e-9)
     scores = mat @ q
-    top = np.argsort(-scores)[:k]
-    return [
-        {
-            "doc": rows[i]["doc"],
-            "page": rows[i]["page"],
-            "text": rows[i]["text"],
-            "score": float(scores[i]),
-        }
-        for i in top
-    ]
+    top = np.argsort(-scores)[:k * 2]
+
+    # Deduplicate search results
+    results = []
+    seen = set()
+    for i in top:
+        text = rows[i]["text"]
+        sig = re.sub(r'\s+', ' ', text.lower().strip())[:140]
+        if sig not in seen:
+            seen.add(sig)
+            results.append({
+                "doc": rows[i]["doc"],
+                "page": rows[i]["page"],
+                "text": text,
+                "score": float(scores[i]),
+            })
+            if len(results) >= k:
+                break
+
+    return results
 
 
 def answer(question):
-    hits = search(question, k=4)
+    hits = search(question, k=5)
     if not hits:
         return {
             "answer": (
@@ -117,13 +163,19 @@ def answer(question):
             ),
             "sources": [],
         }
-    context = "\n\n".join(f"[{h['doc']} p.{h['page']}]\n{h['text']}" for h in hits)
+
+    context_parts = []
+    for h in hits:
+        clean_chunk = _clean_extracted_text(h['text'])
+        context_parts.append(f"[{h['doc']} p.{h['page']}]\n{clean_chunk}")
+    context = "\n\n---\n\n".join(context_parts)
+
     reply = llm.chat([
         {"role": "system", "content": SYSTEM_ANSWER},
         {"role": "user", "content": f"Context from notes:\n{context}\n\nStudent Question: {question}"},
     ])
     sources = [
-        {"doc": h["doc"], "page": h["page"], "snippet": h["text"][:240], "score": round(h["score"], 3)}
+        {"doc": h["doc"], "page": h["page"], "snippet": _clean_extracted_text(h["text"])[:220], "score": round(h["score"], 3)}
         for h in hits
     ]
     return {"answer": reply, "sources": sources}
@@ -133,7 +185,7 @@ def quiz(topic, n=4):
     hits = search(topic, k=5)
     if not hits:
         return {"quiz": "Please upload your course notes first to generate quizzes."}
-    context = "\n\n".join(h["text"] for h in hits)
+    context = "\n\n---\n\n".join(_clean_extracted_text(h["text"]) for h in hits)
     text = llm.chat([
         {"role": "system", "content": "You create high-yield exam practice questions and solutions."},
         {
@@ -152,7 +204,7 @@ def summary(topic):
     hits = search(topic, k=5)
     if not hits:
         return {"summary": "Upload notes to generate a topic summary."}
-    context = "\n\n".join(h["text"] for h in hits)
+    context = "\n\n---\n\n".join(_clean_extracted_text(h["text"]) for h in hits)
     text = llm.chat([
         {"role": "system", "content": SYSTEM_SUMMARY},
         {
@@ -167,7 +219,7 @@ def viva_practice(topic):
     hits = search(topic, k=4)
     if not hits:
         return {"viva": "Upload notes to start viva practice."}
-    context = "\n\n".join(h["text"] for h in hits)
+    context = "\n\n---\n\n".join(_clean_extracted_text(h["text"]) for h in hits)
     text = llm.chat([
         {"role": "system", "content": SYSTEM_VIVA},
         {
@@ -182,7 +234,7 @@ def generate_flashcards(topic, n=4):
     hits = search(topic, k=4)
     if not hits:
         return {"flashcards": []}
-    context = "\n\n".join(h["text"] for h in hits)
+    context = "\n\n---\n\n".join(_clean_extracted_text(h["text"]) for h in hits)
     prompt = (
         f"Generate {n} high-yield revision flashcards on '{topic}' from this text. "
         "Return ONLY a valid JSON array of objects with 'question' and 'answer' keys. "
@@ -198,13 +250,11 @@ def generate_flashcards(topic, n=4):
         except Exception:
             cards = []
     if not cards:
-        # Fallback split
         cards = [
             {"question": f"Key Concept of {topic}", "answer": f"Core principles discussed in uploaded notes on {topic}."},
             {"question": f"Practical Application of {topic}", "answer": "Demonstrated in lab assignments and textbook readings."},
         ]
 
-    # Save to DB for spaced repetition
     with db.conn() as c:
         for card in cards:
             c.execute(
