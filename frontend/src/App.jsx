@@ -35,6 +35,9 @@ export default function App() {
           text: h.engine || "Universal Engine",
           mode: h.mode,
         });
+        if (h.mode === "cloud-api" && !geminiKey) {
+          setGeminiKey("••••••••••••••••");
+        }
       })
       .catch(() => {
         setEngine({

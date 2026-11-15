@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
+import FormattedContent from "../FormattedContent";
 
 const MODES = [
   { id: "chat", label: "💬 Ask Doubts" },
@@ -301,15 +302,22 @@ export default function Chat() {
           <div style={{ textAlign: "center", padding: "30px 16px" }}>
             <div style={{ fontSize: "36px", marginBottom: "8px" }}>🎓</div>
             <h3>Prof. Pilot Study Copilot</h3>
-            <p className="muted small" style={{ maxWidth: "420px", margin: "0 auto" }}>
-              Select multiple PDFs above to index them. Ask doubts, generate quizzes, or practice oral viva voce questions.
+            <p className="muted small" style={{ maxWidth: "480px", margin: "0 auto 14px" }}>
+              Upload syllabus & lecture notes to ask deep concept questions, generate step-by-step mathematical examples, and get high-yield exam breakdowns.
             </p>
+            <div style={{ display: "inline-flex", gap: "8px", background: "rgba(168, 85, 247, 0.1)", border: "1px solid var(--line)", padding: "6px 14px", borderRadius: "999px", fontSize: "12px", color: "#c084fc" }}>
+              💡 Tip: Click the ⚙️ button in the bottom left sidebar anytime to activate Free Google Gemini Cloud AI for full depth!
+            </div>
           </div>
         )}
 
         {msgs.map((m, i) => (
           <div key={i} className={"msg " + m.role}>
-            <p>{m.text}</p>
+            {m.role === "ai" ? (
+              <FormattedContent text={m.text} />
+            ) : (
+              <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{m.text}</p>
+            )}
             {m.sources && m.sources.length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center", marginTop: "10px", paddingTop: "8px", borderTop: "1px solid var(--line)" }}>
                 <span className="muted small" style={{ fontWeight: 600 }}>Citations:</span>

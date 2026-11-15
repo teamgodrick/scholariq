@@ -180,7 +180,7 @@ def health():
 @app.post("/ai/config")
 def config_ai(cfg: AIConfigPayload):
     if cfg.api_key:
-        os.environ["GEMINI_API_KEY"] = cfg.api_key
+        llm.set_stored_gemini_key(cfg.api_key)
     return llm.get_engine_status()
 
 
