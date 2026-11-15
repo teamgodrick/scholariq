@@ -1,19 +1,40 @@
-SCHOLARIQ 3-MINUTE DEMO SCRIPT (Person S edits, Person J records)
+SCHOLARIQ 3-MINUTE ROUND 2 DEMO SCRIPT
+Team: Jeet Thakar, Vydya Varshith, Team Member 3
 
-0:00-0:25  The problem
-  "Students juggle ten apps, and cloud AI tools do not know their own syllabus
-   and take their data."
+0:00 - 0:25 The Problem & Architecture
+  "College students juggle 10 fragmented apps while cloud chatbots leak personal notes and cost money.
+   ScholarIQ is an on-device Academic & Student Life OS running 100% locally on this laptop
+   using Meta Llama 3.2 8B and nomic-embed-text via LM Studio on port 1234."
 
-0:25-1:15  Prof. Pilot
-  Upload the syllabus PDF. Ask: ______________________  Show the page tag.
+0:25 - 1:10 Prof. Pilot (Local Ground-Truth RAG)
+  - Show the uploaded syllabus/slides PDF.
+  - Ask a conceptual question (e.g., "Explain memory management").
+  - Point out the exact page citation: "(Operating_Systems.pdf, p.4)".
+  - Switch tabs: Click "🗂️ Flashcards" -> show interactive flip-card active recall.
+  - Show "🎙️ Viva Voce Drill" & "📝 Exam Quiz".
+  - Tap the microphone button to show Speech-to-Text voice query!
 
-1:15-2:00  Today plan
-  Paste a WhatsApp-style message: "______________________"
-  Click Find deadline, add the task, show the new order in Today's plan.
+1:10 - 1:45 Chrono-Regulator & WhatsApp Extractor
+  - Paste a real college WhatsApp announcement:
+    "All CSE 3rd years: DAA Lab Assignment 3 must be submitted on GitHub by this Friday 11:59 PM."
+  - Click "Find Deadline with Local LLM". Watch Llama 3.2 instantly extract the ISO date and task.
+  - Click "Add to Priority Matrix" and show how the ranked plan updates.
+  - Show the Timetable section and clash detection.
 
-2:00-2:30  Check-in
-  Save a tired check-in (4 hours sleep). Show the burnout ring and the shorter plan.
+1:45 - 2:15 Wellness Core & Burnout Adaptation
+  - Log a realistic tired hostel student check-in (4 hours sleep, 1 meal, 10h screen time).
+  - Watch the Cosmic Burnout Ring turn amber/rose.
+  - Show how Chrono-Regulator automatically adapts: compresses today's plan to top 2 tasks and defers the rest.
+  - Show the Pomodoro Focus Timer with the 20-20-20 eye break prompt!
 
-2:30-3:00  Privacy and future
-  "Everything ran on this laptop with a local model. Nothing was sent to the cloud."
-  Mention the roadmap: GitHub Sentinel, exam mode, habits, attendance.
+2:15 - 2:40 GitHub Sentinel & 75% Attendance Calculator
+  - Show GitHub Repo Sentinel: commit streak counter, days inactive, and the Stagnation Warning Radar.
+  - Open College Toolkit -> Show the 75% Attendance Safe-to-Skip Calculator:
+    "Safe to bunk 2 classes" vs "Deficit: Need 3 consecutive classes to reach 75%".
+  - Show the Exam Mode Revision Planner and Hostel Budget tracker.
+
+2:40 - 3:00 Privacy & Conclusion
+  - Disconnect Wi-Fi or point out the offline status:
+    "Everything ran directly on this laptop's GPU/CPU. Zero bytes were sent to the cloud,
+     API cost is zero, and the student's syllabus remains 100% confidential.
+     This is ScholarIQ — Study, Plan, and Thrive."

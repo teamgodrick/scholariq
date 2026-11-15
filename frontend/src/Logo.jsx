@@ -1,20 +1,65 @@
-export default function Logo({ size = 36 }) {
+export default function Logo({ size = 42, showText = false }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 200 200" role="img" aria-label="ScholarIQ">
-      <defs>
-        <linearGradient id="lg-bg" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#2A1517" />
-          <stop offset="1" stopColor="#140A0B" />
-        </linearGradient>
-        <linearGradient id="lg-fire" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#FF4B2B" />
-          <stop offset="1" stopColor="#FFB347" />
-        </linearGradient>
-      </defs>
-      <rect width="200" height="200" rx="52" fill="url(#lg-bg)" />
-      <path d="M40 34 C44 96 70 144 100 166 C92 128 74 82 40 34 Z" fill="url(#lg-fire)" />
-      <path d="M160 34 C156 96 130 144 100 166 C108 128 126 82 160 34 Z" fill="url(#lg-fire)" />
-      <path d="M100 50 C113 70 113 88 100 102 C87 88 87 70 100 50 Z" fill="#FFD27A" />
-    </svg>
+    <div className="logo-container" style={{ display: "inline-flex", alignItems: "center", gap: "10px" }}>
+      <div
+        className="logo-glow-wrapper"
+        style={{
+          width: size,
+          height: size,
+          borderRadius: "50%",
+          padding: "2px",
+          background: "linear-gradient(135deg, #a855f7, #6366f1, #c084fc)",
+          boxShadow: "0 0 16px rgba(168, 85, 247, 0.45)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          overflow: "hidden",
+        }}
+      >
+        <img
+          src="/logo-scholarIQ.jpeg"
+          alt="ScholarIQ Logo"
+          style={{
+            width: "100%",
+            height: "100%",
+            borderRadius: "50%",
+            objectFit: "cover",
+            display: "block",
+          }}
+          onError={(e) => {
+            // fallback if image fails to load
+            e.target.style.display = "none";
+          }}
+        />
+      </div>
+      {showText && (
+        <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
+          <span
+            style={{
+              fontWeight: 800,
+              fontSize: "19px",
+              letterSpacing: "-0.02em",
+              background: "linear-gradient(135deg, #f3e8ff, #c084fc, #9333ea)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}
+          >
+            scholarIQ
+          </span>
+          <span
+            style={{
+              fontSize: "9px",
+              letterSpacing: "0.22em",
+              color: "#a855f7",
+              fontWeight: 700,
+              textTransform: "uppercase",
+              marginTop: "2px",
+            }}
+          >
+            Study · Plan · Thrive
+          </span>
+        </div>
+      )}
+    </div>
   );
 }

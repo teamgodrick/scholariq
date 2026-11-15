@@ -1,6 +1,7 @@
-"""SQLite storage for ScholarIQ. One file, no server to install."""
+"""SQLite storage for ScholarIQ. Zero cloud storage, 100% private local DB."""
 import os
 import sqlite3
+from datetime import date
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scholariq.db")
 
@@ -11,18 +12,213 @@ def conn():
     return c
 
 
+def _migrate(c):
+    """Safely adds newly required columns to existing tables."""
+    # Check checkins columns
+    existing_checkins = [col[1] for col in c.execute("PRAGMA table_info(checkins)").fetchall()]
+    new_checkins_cols = [
+        ("level", "TEXT DEFAULT 'Low'"),
+        ("advice", "TEXT DEFAULT ''"),
+        ("meals", "INTEGER DEFAULT 3"),
+        ("exercise_m", "INTEGER DEFAULT 20"),
+        ("screentime_h", "REAL DEFAULT 6.0"),
+        ("created_at", "TEXT DEFAULT CURRENT_TIMESTAMP"),
+    ]
+    for col_name, col_type in new_checkins_cols:
+        if col_name not in existing_checkins:
+            c.execute(f"ALTER TABLE checkins ADD COLUMN {col_name} {col_type}")
+
+    # Check tasks columns
+    existing_tasks = [col[1] for col in c.execute("PRAGMA table_info(tasks)").fetchall()]
+    new_tasks_cols = [
+        ("priority_override", "INTEGER DEFAULT NULL"),
+        ("created_at", "TEXT DEFAULT CURRENT_TIMESTAMP"),
+    ]
+    for col_name, col_type in new_tasks_cols:
+        if col_name not in existing_tasks:
+            c.execute(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}")
+
+
 def init():
     with conn() as c:
         c.executescript(
             """
             CREATE TABLE IF NOT EXISTS chunks(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                doc TEXT, page INTEGER, text TEXT, emb BLOB);
+                doc TEXT,
+                page INTEGER,
+                text TEXT,
+                emb BLOB
+            );
+
+            CREATE TABLE IF NOT EXISTS documents(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename TEXT UNIQUE,
+                chunks_count INTEGER DEFAULT 0,
+                file_size INTEGER DEFAULT 0,
+                uploaded_at TEXT
+            );
+
             CREATE TABLE IF NOT EXISTS tasks(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT, due_date TEXT, type TEXT, done INTEGER DEFAULT 0);
+                title TEXT,
+                due_date TEXT,
+                type TEXT DEFAULT 'assignment',
+                done INTEGER DEFAULT 0,
+                priority_override INTEGER DEFAULT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+
             CREATE TABLE IF NOT EXISTS checkins(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                day TEXT, sleep_h REAL, mood INTEGER, water INTEGER, score INTEGER);
+                day TEXT,
+                sleep_h REAL DEFAULT 7,
+                mood INTEGER DEFAULT 3,
+                water INTEGER DEFAULT 4,
+                meals INTEGER DEFAULT 3,
+                exercise_m INTEGER DEFAULT 20,
+                screentime_h REAL DEFAULT 6,
+                score INTEGER DEFAULT 25,
+                level TEXT DEFAULT 'Low',
+                advice TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS timetable(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                day_of_week TEXT,
+                subject TEXT,
+                start_time TEXT,
+                end_time TEXT,
+                room TEXT,
+                professor TEXT,
+                type TEXT DEFAULT 'Lecture'
+            );
+
+            CREATE TABLE IF NOT EXISTS github_repos(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner TEXT,
+                repo TEXT,
+                project_name TEXT,
+                project_deadline TEXT,
+                last_commit_date TEXT,
+                last_commit_msg TEXT,
+                commits_today INTEGER DEFAULT 0,
+                streak_days INTEGER DEFAULT 0,
+                is_stagnant INTEGER DEFAULT 0,
+                stagnant_warning TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS attendance(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject TEXT UNIQUE,
+                attended INTEGER DEFAULT 0,
+                total INTEGER DEFAULT 0,
+                target_pct REAL DEFAULT 75.0
+            );
+
+            CREATE TABLE IF NOT EXISTS habits(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT,
+                category TEXT DEFAULT 'Study',
+                streak INTEGER DEFAULT 0,
+                completed_today INTEGER DEFAULT 0,
+                last_completed_date TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS flashcards(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                doc TEXT,
+                topic TEXT,
+                question TEXT,
+                answer TEXT,
+                confidence INTEGER DEFAULT 0,
+                next_review TEXT,
+                reviews_count INTEGER DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS budget(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT,
+                amount REAL,
+                category TEXT,
+                type TEXT DEFAULT 'expense',
+                date TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS exam_plans(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject TEXT,
+                exam_date TEXT,
+                syllabus_topics TEXT,
+                plan_json TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
             """
+        )
+        _migrate(c)
+        _seed_defaults(c)
+
+
+def _seed_defaults(c):
+    """Seed helpful sample data if starting fresh for instant demo experience."""
+    if c.execute("SELECT COUNT(*) FROM timetable").fetchone()[0] == 0:
+        c.executemany(
+            """INSERT INTO timetable(day_of_week, subject, start_time, end_time, room, professor, type)
+               VALUES(?,?,?,?,?,?,?)""",
+            [
+                ("Monday", "Distributed Systems & Cloud", "09:00", "10:30", "Lab 302", "Dr. Sharma", "Lab"),
+                ("Monday", "Design & Analysis of Algorithms", "11:00", "12:30", "Hall A", "Prof. Verma", "Lecture"),
+                ("Monday", "Machine Learning & Neural Nets", "14:00", "15:30", "Room 405", "Dr. Iyer", "Lecture"),
+                ("Tuesday", "Database Engineering", "10:00", "11:30", "Room 201", "Prof. Reddy", "Lecture"),
+                ("Tuesday", "Computer Networks", "13:00", "14:30", "Lab 104", "Dr. Rao", "Lab"),
+                ("Wednesday", "Operating Systems", "09:30", "11:00", "Hall B", "Dr. Joshi", "Lecture"),
+                ("Wednesday", "Full Stack Web Arch", "14:00", "16:00", "Innovation Lab", "Prof. Kulkarni", "Lab"),
+                ("Thursday", "Design & Analysis of Algorithms", "11:00", "12:30", "Hall A", "Prof. Verma", "Lecture"),
+                ("Thursday", "Distributed Systems", "14:00", "15:30", "Room 302", "Dr. Sharma", "Lecture"),
+                ("Friday", "Compiler Design", "09:00", "10:30", "Room 401", "Dr. Nair", "Lecture"),
+                ("Friday", "Minor Project Review", "14:00", "16:30", "Auditorium", "Panel", "Project"),
+            ],
+        )
+
+    if c.execute("SELECT COUNT(*) FROM attendance").fetchone()[0] == 0:
+        c.executemany(
+            """INSERT INTO attendance(subject, attended, total, target_pct) VALUES(?,?,?,?)""",
+            [
+                ("Design & Analysis of Algorithms", 28, 32, 75.0),
+                ("Distributed Systems", 22, 28, 75.0),
+                ("Machine Learning", 18, 26, 75.0),
+                ("Database Engineering", 25, 30, 75.0),
+                ("Computer Networks", 19, 24, 75.0),
+            ],
+        )
+
+    if c.execute("SELECT COUNT(*) FROM habits").fetchone()[0] == 0:
+        c.executemany(
+            """INSERT INTO habits(title, category, streak, completed_today, last_completed_date) VALUES(?,?,?,?,?)""",
+            [
+                ("Solve 1 LeetCode Problem", "Placement", 8, 1, date.today().isoformat()),
+                ("Git Commit Daily Code", "Code", 12, 1, date.today().isoformat()),
+                ("Review Prof. Pilot Notes", "Study", 5, 0, None),
+                ("Drink 3L Water", "Wellness", 6, 1, date.today().isoformat()),
+                ("20-min Evening Walk / Exercise", "Wellness", 4, 0, None),
+            ],
+        )
+
+    if c.execute("SELECT COUNT(*) FROM github_repos").fetchone()[0] == 0:
+        c.execute(
+            """INSERT INTO github_repos(owner, repo, project_name, project_deadline, last_commit_date, last_commit_msg, commits_today, streak_days, is_stagnant, stagnant_warning)
+               VALUES(?,?,?,?,?,?,?,?,?,?)""",
+            (
+                "team-scholars",
+                "ScholarIQ",
+                "ScholarIQ Final Project / Hackathon",
+                date.today().isoformat(),
+                date.today().isoformat(),
+                "feat: purple cosmic UI and local RAG engine",
+                5,
+                7,
+                0,
+                "",
+            ),
         )
