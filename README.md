@@ -15,6 +15,17 @@ Unlike traditional AI projects that demand 16GB+ RAM, gaming GPUs, or downloadin
 
 ---
 
+## 🚀 How to Run (3 Downloads / 1-click)
+
+1. Open our repository from the direct link **`github.com/teamgodrick/scholariq`** then go to the code section -> Select the green code <> button -> go to local and download the zip file .
+3. Download the python exe to run the backend properly directly from `https://www.python.org/ftp/python/3.15.2/python-3.15.2-amd64.exe` and install it while keeping **add to path** selected. (~650mb of storage)
+4. Download node.js to run the frontend properly directly from `https://nodejs.org/dist/v26.13.1/node-v26.13.1-x64.msi` and install it. (~500mb of storage)
+5. Extract the zip file of repository.
+6. Double-click **`run.bat`** (or `start-scholariq.bat`).
+7. That's it! The backend and frontend will start and automatically launch **`http://localhost:5173`** in your browser.
+
+---
+
 ## 🛠️ Key Features & Modules
 
 ### 1. 📊 College OS: Attendance & 75% Safe-to-Skip (Modeled on *The Thing*)
@@ -61,7 +72,3 @@ Unlike traditional AI projects that demand 16GB+ RAM, gaming GPUs, or downloadin
 
 ---
 
-## 🚀 How to Run (1-Click)
-
-1. Double-click **`run.bat`** (or `start-scholariq.bat`).
-2. That's it! The backend and frontend will start and automatically launch **`http://localhost:5173`** in your browser.
