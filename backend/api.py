@@ -3,6 +3,7 @@ import re
 from datetime import date, datetime
 
 import core
+import academic
 import db
 import life
 import llm
@@ -85,7 +86,9 @@ def alerts():
 def today(r):
     avg = db.one("SELECT AVG(sleep_h) AS a FROM checkins WHERE day>=date('now','-6 day','localtime')")["a"]
     habits = life.habits_list()
-    return {"date": date.today().strftime("%A, %d %B"), "plan": core.plan(), "alerts": alerts(),
+    return {"date": date.today().strftime("%A, %d %B"), "today_iso": db.today(), "greeting": academic.today_greeting(),
+            "sessions": academic.today_sessions(), "events": [e for e in academic.calendar_events() if e["event_date"] == db.today()],
+            "plan": core.plan(), "alerts": alerts(),
             "winddown": life.winddown(),
             "stats": {"open_tasks": len(core.open_tasks()), "focus_today": life.focus_stats()["today"],
                       "habits_done": sum(1 for h in habits if h["done_today"]), "habits_total": len(habits),
@@ -297,6 +300,71 @@ def attendance_mark(r):
 def attendance_delete(r):
     life.subject_delete(r.args[0])
     return {"ok": True}
+
+
+# ---------- Academic calendar and timetable ----------
+@route("GET", "/api/timetable")
+def timetable(r):
+    return academic.timetable_list()
+
+
+@route("POST", "/api/timetable")
+def timetable_add(r):
+    return {"id": academic.timetable_add(r.body.get("subject"), r.body.get("day"), r.body.get("start_time"),
+                                         r.body.get("end_time"), r.body.get("location"))}
+
+
+@route("POST", r"/api/timetable/(\d+)/delete")
+def timetable_delete(r):
+    academic.timetable_delete(r.args[0])
+    return {"ok": True}
+
+
+@route("GET", "/api/lectures")
+def lectures(r):
+    return academic.lectures_for_day(r.query.get("date"))
+
+
+@route("POST", r"/api/lectures/(\d+)/mark")
+def lecture_mark(r):
+    academic.mark_lecture(r.args[0], r.body.get("date"), r.body.get("status"))
+    return {"ok": True}
+
+
+@route("GET", "/api/calendar/events")
+def calendar_events(r):
+    return academic.calendar_events()
+
+
+@route("POST", "/api/calendar/import")
+def calendar_import(r):
+    return academic.extract_calendar(r.query.get("name", "calendar.pdf"), r.raw)
+
+
+@route("POST", "/api/calendar/events/import")
+def calendar_events_import(r):
+    return academic.import_events(r.body.get("events"))
+
+
+@route("POST", r"/api/calendar/events/(\d+)/delete")
+def calendar_event_delete(r):
+    academic.calendar_event_delete(r.args[0])
+    return {"ok": True}
+
+
+@route("GET", "/api/profile")
+def profile(r):
+    return academic.profile()
+
+
+@route("POST", "/api/profile/photo")
+def profile_photo(r):
+    return academic.save_profile_photo(r.raw)
+
+
+@route("POST", "/api/profile/photo/remove")
+def profile_photo_remove(r):
+    return academic.save_profile_photo(b"")
 
 
 @route("GET", "/api/budget")

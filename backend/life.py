@@ -57,7 +57,19 @@ def _subject(s):
 
 
 def attendance_list():
-    return [_subject(s) for s in db.q("SELECT * FROM subjects ORDER BY name")]
+    subjects = {s["name"]: s for s in db.q("SELECT * FROM subjects")}
+    tracked = db.q(
+        "SELECT t.subject AS name, "
+        "SUM(CASE WHEN a.status='present' THEN 1 ELSE 0 END) AS attended, "
+        "SUM(CASE WHEN a.status IN ('present','absent') THEN 1 ELSE 0 END) AS total "
+        "FROM timetable t JOIN lecture_attendance a ON a.timetable_id=t.id GROUP BY t.subject")
+    for row in tracked:
+        if row["name"] in subjects:
+            subjects[row["name"]]["attended"] += row["attended"]
+            subjects[row["name"]]["total"] += row["total"]
+        else:
+            subjects[row["name"]] = {"id": None, **row}
+    return [_subject(s) for s in sorted(subjects.values(), key=lambda x: x["name"].lower())]
 
 
 def subject_add(name, attended=0, total=0):
@@ -226,7 +238,7 @@ def meal_suggest():
 
 
 # ---------- Settings and sleep wind-down ----------
-KEYS = {"bedtime", "github_user", "display_name", "mess_menu", "chat_model", "embed_model", "vision_model", "ai_memory"}
+KEYS = {"bedtime", "github_user", "display_name", "profile_description", "mess_menu", "chat_model", "embed_model", "vision_model", "ai_memory"}
 
 
 def settings_all():
@@ -238,7 +250,8 @@ def settings_save(data):
         if k in KEYS:
             if k == "bedtime":
                 datetime.strptime(str(v), "%H:%M")
-            db.set_setting(k, str(v).strip()[:500])
+            limit = 120 if k == "profile_description" else 500
+            db.set_setting(k, str(v).strip()[:limit])
 
 
 def winddown():

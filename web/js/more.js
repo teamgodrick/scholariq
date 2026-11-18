@@ -1,4 +1,4 @@
-import { fill, h, api, toast, head, card, field, btn, note } from "./ui.js";
+import { fill, h, api, upload, toast, head, card, field, btn, note } from "./ui.js";
 
 export async function review(root) {
   const out = h("div");
@@ -13,16 +13,39 @@ export async function review(root) {
 }
 
 export async function settings(root) {
-  const [s, md] = await Promise.all([api("/settings"), api("/models")]);
+  const [s, md, profile] = await Promise.all([api("/settings"), api("/models"), api("/profile")]);
   const pickModel = (key, label) => { const sel = h("select", {}, [h("option", { value: "" }, "Automatic"), ...(md.models || []).map((id) => h("option", { value: id }, id))]); sel.value = s[key] || ""; return [sel, field(label, sel)]; };
   const [chatSel, chatField] = pickModel("chat_model", "Chat model"), [embSel, embField] = pickModel("embed_model", "Embedding model (for search)"), [visSel, visField] = pickModel("vision_model", "Vision model (for pictures)");
   const bed = h("input", { type: "time", value: s.bedtime || "23:00" }), gh = h("input", { value: s.github_user, placeholder: "e.g. octocat" });
   const memSel = h("select", {}, [["small", "Small: works with any model, best for 8 GB laptops"], ["medium", "Medium: models with 8k+ context"], ["large", "Large: models with 16k+ context"]].map(([v, l]) => h("option", { value: v }, l))); memSel.value = s.ai_memory || "small";
-  const nm = h("input", { value: s.display_name, placeholder: "Your name" }), menu = h("textarea", { rows: 4, placeholder: "Paste this week's mess menu" }); menu.value = s.mess_menu || "";
+  const nm = h("input", { value: s.display_name, placeholder: "Your name" });
+  const description = h("input", { value: s.profile_description || "", maxlength: 120, placeholder: "A short line about you" });
+  const photoFile = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" });
+  const photoPreview = h("div", { class: "profile-preview" }, profile.photo
+    ? h("img", { class: "profile-avatar", src: profile.photo, alt: "Profile picture preview" })
+    : note("No profile picture uploaded."));
+  const menu = h("textarea", { rows: 4, placeholder: "Paste this week's mess menu" }); menu.value = s.mess_menu || "";
   fill(root, head("Settings", "Everything is stored only on this laptop."),
     h("div", { class: "cols" },
-      card("Profile", field("Display name", nm), field("Bedtime (for the wind-down reminder)", bed), field("GitHub username", gh), field("Mess menu", menu), h("h2", { style: "margin-top:18px" }, "AI models"), chatField, embField, visField, field("AI memory (how much of your notes and chat the AI reads at once)", memSel), note("Models you downloaded in LM Studio appear here. Automatic picks for you."),
-        btn("Save settings", async () => { await api("/settings", { display_name: nm.value, bedtime: bed.value, github_user: gh.value, mess_menu: menu.value, chat_model: chatSel.value, embed_model: embSel.value, vision_model: visSel.value, ai_memory: memSel.value }); toast("Saved."); })),
+      card("Profile", field("Display name", nm), field("Short description", description),
+        field("Profile picture (PNG, JPG, or WEBP; up to 1 MB)", photoFile), photoPreview,
+        h("div", { class: "btns" },
+          btn("Upload picture", async () => {
+            const selected = photoFile.files[0];
+            if (!selected) throw new Error("Choose a profile picture first.");
+            const result = await upload("/profile/photo", selected);
+            fill(photoPreview, h("img", { class: "profile-avatar", src: result.photo, alt: "Profile picture preview" }));
+            photoFile.value = "";
+            toast("Profile picture saved.");
+          }),
+          profile.photo ? btn("Remove picture", async () => {
+            await api("/profile/photo/remove", {});
+            fill(photoPreview, note("No profile picture uploaded."));
+            profile.photo = "";
+            toast("Profile picture removed.");
+          }, "ghost danger") : null),
+        field("Bedtime (for the wind-down reminder)", bed), field("GitHub username", gh), field("Mess menu", menu), h("h2", { style: "margin-top:18px" }, "AI models"), chatField, embField, visField, field("AI memory (how much of your notes and chat the AI reads at once)", memSel), note("Models you downloaded in LM Studio appear here. Automatic picks for you."),
+        btn("Save settings", async () => { await api("/settings", { display_name: nm.value, profile_description: description.value, bedtime: bed.value, github_user: gh.value, mess_menu: menu.value, chat_model: chatSel.value, embed_model: embSel.value, vision_model: visSel.value, ai_memory: memSel.value }); toast("Saved."); })),
       h("div", {}, card("Demo data", note("Fills every page with a realistic sample student so you can try or present ScholarIQ. Your uploaded PDFs are kept."),
         h("div", { class: "btns" }, btn("Load demo data", async () => { if (confirm("Replace current data with demo data?")) { await api("/demo/seed", {}); toast("Demo data loaded."); location.hash = "#/today"; } }),
           btn("Clear all data", async () => { if (confirm("Delete tasks, habits and logs? This cannot be undone.")) { await api("/demo/reset", {}); toast("Cleared."); } }, "ghost danger"))),

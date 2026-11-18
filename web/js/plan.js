@@ -4,7 +4,7 @@ const TYPES = ["exam", "lab", "assignment", "project", "other"];
 const bucket = (d) => (d <= 0 ? "now" : d <= 3 ? "soon" : "later");
 
 export async function today(root) {
-  const d = await api("/today");
+  const [d, profile] = await Promise.all([api("/today"), api("/profile")]);
   const s = d.stats;
   const message = h("textarea", { rows: 3, placeholder: "e.g. DBMS lab record submission is this Friday before 4 PM" });
   const title = h("input"), due = h("input", { type: "date" });
@@ -18,10 +18,27 @@ export async function today(root) {
         h("span", { class: "muted small" }, `${i.reason}, ${i.type}${i.deferred ? ", deferred while your load is high" : ""}`)),
       h("span", { class: "score", title: "Priority score" }, i.priority),
       btn("Done", async () => { await api(`/tasks/${i.id}/done`, {}); refresh(); }, "ghost"))));
+  const sessions = d.sessions.length ? d.sessions.map((session) => {
+    const marked = Boolean(session.status);
+    return h("div", { class: "row later lecture" },
+      h("div", { class: "grow" }, h("strong", {}, session.subject),
+        h("span", { class: "muted small" }, `${session.start_time}–${session.end_time}${session.location ? " · " + session.location : ""}`)),
+      marked ? h("span", { class: "chip status-" + session.status }, session.status === "no_class" ? "No class" : session.status) :
+        h("div", { class: "btns" },
+          ...[["Present", "present"], ["Absent", "absent"], ["No class", "no_class"]].map(([label, status]) =>
+            btn(label, async () => { await api(`/lectures/${session.id}/mark`, { date: d.today_iso, status }); refresh(); }, "ghost"))));
+  }) : card(null, note("No classes on your timetable today."), h("a", { href: "#/attendance" }, "Set up your timetable"));
 
   fill(root, 
-    head("Today", d.date),
+    h("header", { class: "today-hero" },
+      profile.photo ? h("img", { class: "profile-avatar", src: profile.photo, alt: "Profile picture" }) :
+        h("div", { class: "profile-avatar profile-initial" }, (profile.display_name || "S").slice(0, 1).toUpperCase()),
+      h("div", {}, h("h1", {}, d.greeting), h("p", { class: "muted" }, `${d.date}${profile.description ? " · " + profile.description : ""}`))),
     d.winddown.state !== "ok" ? h("div", { class: "banner " + d.winddown.state }, d.winddown.message) : null,
+    d.events.length ? card("Academic calendar today", d.events.map((event) =>
+      h("p", {}, h("strong", {}, event.title), h("span", { class: "muted small" }, ` · ${event.event_type}`)))) : null,
+    card("Today's lectures", note("Mark each scheduled lecture once as present, absent, or no class."),
+      sessions),
     h("div", { class: "stats" }, [
       ["Open tasks", s.open_tasks], ["Focus today", s.focus_today + " min"], ["Habits", `${s.habits_done}/${s.habits_total}`],
       ["Cards due", s.cards_due], ["Water", s.water + " glasses"], ["Avg sleep", s.avg_sleep ? s.avg_sleep + " h" : "n/a"],

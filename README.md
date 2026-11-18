@@ -20,7 +20,8 @@ sends your data to the cloud.
 - Flashcards with spaced repetition that never repeat, practice quizzes, exam mode revision plans.
 - Chrono-Regulator: deadlines, priority plan, deadline extraction from pasted messages.
 - Wellbeing: daily check-in with burnout score, mood journal, habits, nutrition and water, focus timer, sleep wind-down.
-- Campus life: attendance guard (75% rule), hostel budget, placement prep.
+- Campus life: day-by-day timetable, one-time present/absent/no-class lecture tracking, academic-calendar PDF/image imports, attendance guard (75% rule), hostel budget and placement prep.
+- Today's dashboard greets you by name, shows your scheduled lectures and calendar events, and supports a local profile picture.
 - Code: GitHub Sentinel and resume helper. Together: study group board and anonymous mentor view.
 
 ## Folders

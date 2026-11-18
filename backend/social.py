@@ -117,8 +117,9 @@ def mentor():
             "note": "Anonymous and aggregated. No names or personal notes are ever shown to mentors."}
 
 
-TABLES = ["tasks", "checkins", "class_checkins", "habits", "habit_logs", "subjects", "expenses", "prep",
-          "focus", "journal", "cards", "meals", "water", "posts", "settings"]
+TABLES = ["tasks", "checkins", "class_checkins", "habits", "habit_logs", "lecture_attendance", "timetable",
+          "academic_events", "subjects", "expenses", "prep", "focus", "journal", "cards", "meals", "water",
+          "posts", "settings"]
 
 
 def reset(keep_docs=True):

@@ -19,6 +19,7 @@ const PAGES = [
   { id: "habits", label: "Habits", group: "Wellbeing", fn: life.habits },
   { id: "nutrition", label: "Nutrition", group: "Wellbeing", fn: life.nutrition },
   { id: "attendance", label: "Attendance", group: "Campus life", fn: campus.attendance },
+  { id: "calendar", label: "Academic calendar", group: "Campus life", fn: campus.calendar },
   { id: "budget", label: "Budget", group: "Campus life", fn: campus.budget },
   { id: "placement", label: "Placement prep", group: "Campus life", fn: campus.placement },
   { id: "github", label: "Code activity", group: "Code", fn: social.github },

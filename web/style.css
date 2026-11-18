@@ -45,6 +45,12 @@ a { color: var(--lav); }
 .dot.on { background: var(--good); box-shadow: 0 0 0 4px rgba(134, 239, 172, .15); } .dot.off { background: var(--bad); }
 .main { padding: 30px 38px 60px; max-width: 1120px; width: 100%; }
 .page-head { margin-bottom: 18px; }
+.today-hero { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
+.today-hero h1 { font-size: 30px; }
+.profile-avatar { width: 68px; height: 68px; border-radius: 50%; object-fit: cover; border: 2px solid var(--violet2); background: var(--panel2); }
+.profile-initial { display: grid; place-items: center; color: var(--lav); font-size: 26px; font-weight: 700; }
+.profile-preview { margin: 0 0 12px; }
+.profile-preview .profile-avatar { width: 76px; height: 76px; }
 .cols { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 24px; align-items: start; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
 .card { background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-bottom: 16px; }
@@ -96,7 +102,16 @@ button { font: inherit; }
 .moods { display: flex; gap: 8px; } .mood { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--line); background: #08050f; color: var(--text); cursor: pointer; font-weight: 700; } .mood.on { background: var(--violet); border-color: var(--violet2); }
 .hero { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; } .hero img { width: 220px; max-width: 100%; border-radius: 50%; box-shadow: 0 0 60px var(--glow); }
 .sched { border-left: 2px solid var(--line); padding-left: 14px; margin-bottom: 12px; }
+.lecture { align-items: center; }
+.status-present { color: var(--good); border-color: rgba(134, 239, 172, .35); }
+.status-absent { color: var(--bad); border-color: rgba(251, 113, 133, .35); }
+.status-no_class { color: var(--muted); }
+.legacy-attendance { margin-top: 20px; }
+.legacy-attendance > summary { cursor: pointer; color: var(--lav); margin-bottom: 12px; }
+.calendar-preview-row { display: grid; grid-template-columns: auto repeat(3, minmax(100px, 1fr)); gap: 10px; align-items: end; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.calendar-preview-row .check { margin: 0 0 12px; }
+.calendar-preview-row .check input { flex: none; margin-top: 4px; }
 #toasts { position: fixed; right: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 9; }
 .toast { background: var(--panel2); border: 1px solid var(--violet2); padding: 10px 14px; border-radius: 10px; max-width: 340px; box-shadow: 0 8px 30px rgba(0, 0, 0, .5); } .toast.err { border-color: var(--bad); }
-@media (max-width: 860px) { .shell, .shell.collapsed { grid-template-columns: 1fr; } .side { position: static; height: auto; flex-direction: row; flex-wrap: wrap; } .cols { grid-template-columns: 1fr; } .main { padding: 18px 14px 50px; } .timer { font-size: 60px; } }
+@media (max-width: 860px) { .shell, .shell.collapsed { grid-template-columns: 1fr; } .side { position: static; height: auto; flex-direction: row; flex-wrap: wrap; } .cols { grid-template-columns: 1fr; } .main { padding: 18px 14px 50px; } .timer { font-size: 60px; } .calendar-preview-row { grid-template-columns: auto 1fr; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
