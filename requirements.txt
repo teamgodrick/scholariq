@@ -1,0 +1,5 @@
+rapidocr==3.10.0; python_version < "3.15"
+onnxruntime>=1.18,<2; python_version < "3.15"
+winrt-Windows.Media.Ocr>=4!10.0.28000.2957; python_version >= "3.15" and sys_platform == "win32"
+winrt-Windows.Graphics.Imaging>=4!10.0.28000.2957; python_version >= "3.15" and sys_platform == "win32"
+winrt-Windows.Storage.Streams>=4!10.0.28000.2957; python_version >= "3.15" and sys_platform == "win32"

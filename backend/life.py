@@ -1,10 +1,14 @@
 """Habits, attendance, budget, placement prep, focus, journal, nutrition, wind-down, review."""
 import calendar
 import math
+import os
+import re
 from datetime import date, datetime, timedelta
 
 import db
 import llm
+import ocr
+import readers
 
 # ---------- Habits ----------
 def _streak(days):
@@ -53,23 +57,181 @@ def _subject(s):
     pct = round(a / t * 100, 1) if t else 100.0
     can_skip = max(0, math.floor(a / 0.75 - t)) if pct >= 75 else 0
     need = math.ceil((0.75 * t - a) / 0.25) if pct < 75 else 0
-    return {**s, "pct": pct, "can_skip": can_skip, "need_to_attend": need}
+    remaining = s.get("remaining_classes")
+    semester_skips = None
+    projected_pct = None
+    extra_classes_needed = None
+    if remaining is not None:
+        remaining = int(remaining)
+        semester_skips = max(0, (4 * a + remaining - 3 * t) // 4)
+        projected_total = t + remaining
+        projected_attended = a + remaining
+        projected_pct = round(projected_attended / projected_total * 100, 1) if projected_total else 100.0
+        extra_classes_needed = max(0, 3 * t - remaining - 4 * a)
+    return {**s, "pct": pct, "can_skip": can_skip, "need_to_attend": need,
+            "remaining_classes": remaining, "semester_can_skip": semester_skips,
+            "projected_pct": projected_pct, "extra_classes_needed": extra_classes_needed}
 
 
 def attendance_list():
-    subjects = {s["name"]: s for s in db.q("SELECT * FROM subjects")}
+    subjects = {}
+    for subject in db.q("SELECT * FROM subjects ORDER BY id"):
+        key = subject["name"].casefold()
+        if key in subjects:
+            current = subjects[key]
+            current["attended"] += subject["attended"]
+            current["total"] += subject["total"]
+            if current["remaining_classes"] is None:
+                current["remaining_classes"] = subject["remaining_classes"]
+            current["id"] = None
+        else:
+            subjects[key] = subject
     tracked = db.q(
         "SELECT t.subject AS name, "
         "SUM(CASE WHEN a.status='present' THEN 1 ELSE 0 END) AS attended, "
         "SUM(CASE WHEN a.status IN ('present','absent') THEN 1 ELSE 0 END) AS total "
         "FROM timetable t JOIN lecture_attendance a ON a.timetable_id=t.id GROUP BY t.subject")
     for row in tracked:
-        if row["name"] in subjects:
-            subjects[row["name"]]["attended"] += row["attended"]
-            subjects[row["name"]]["total"] += row["total"]
+        key = row["name"].casefold()
+        if key in subjects:
+            subjects[key]["attended"] += row["attended"]
+            subjects[key]["total"] += row["total"]
         else:
-            subjects[row["name"]] = {"id": None, **row}
+            subjects[key] = {"id": None, "remaining_classes": None, **row}
     return [_subject(s) for s in sorted(subjects.values(), key=lambda x: x["name"].lower())]
+
+
+def _count(value, label, maximum=1000000):
+    if isinstance(value, bool):
+        raise ValueError(f"{label} must be a whole number.")
+    if isinstance(value, int):
+        number = value
+    elif isinstance(value, float) and value.is_integer():
+        number = int(value)
+    elif isinstance(value, str) and value.strip().isdecimal():
+        number = int(value.strip())
+    else:
+        raise ValueError(f"{label} must be a whole number.")
+    if number < 0 or number > maximum:
+        raise ValueError(f"{label} must be between 0 and {maximum}.")
+    return number
+
+
+def subject_set_remaining(name, remaining):
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("Subject name is required.")
+    remaining = _count(remaining, "Remaining classes", 10000)
+    existing = db.one("SELECT id FROM subjects WHERE lower(name)=lower(?)", (name,))
+    if existing:
+        db.run("UPDATE subjects SET remaining_classes=? WHERE id=?", (remaining, existing["id"]))
+    else:
+        db.run("INSERT INTO subjects(name,attended,total,remaining_classes) VALUES(?,0,0,?)", (name[:60], remaining))
+
+
+def import_attendance_snapshot(snapshots):
+    if not isinstance(snapshots, list) or not snapshots:
+        raise ValueError("No attendance records were selected.")
+    if len(snapshots) > 100:
+        raise ValueError("A maximum of 100 subjects can be imported at once.")
+    clean, names = [], set()
+    for row in snapshots:
+        if not isinstance(row, dict):
+            raise ValueError("Each attendance record must include a subject name.")
+        name = str(row.get("name") or "").strip()
+        if not name:
+            raise ValueError("Every selected record must have a subject name.")
+        key = name.casefold()
+        if key in names:
+            raise ValueError(f"Duplicate subject in the import: {name}.")
+        names.add(key)
+        attended = _count(row.get("attended"), f"{name}: attended classes")
+        total = _count(row.get("total"), f"{name}: total classes")
+        if attended > total:
+            raise ValueError(f"{name}: attended classes cannot exceed total classes.")
+        remaining = row.get("remaining_classes")
+        if remaining is not None:
+            remaining = _count(remaining, f"{name}: remaining classes", 10000)
+        tracked = db.q(
+            "SELECT a.status, COUNT(*) AS count FROM timetable t "
+            "JOIN lecture_attendance a ON a.timetable_id=t.id "
+            "WHERE lower(t.subject)=lower(?) GROUP BY a.status", (name,))
+        tracked_attended = sum(x["count"] for x in tracked if x["status"] == "present")
+        tracked_total = sum(x["count"] for x in tracked if x["status"] in ("present", "absent"))
+        if attended < tracked_attended or total < tracked_total:
+            raise ValueError(
+                f"{name}: uploaded totals are below lecture attendance already tracked in ScholarIQ. "
+                "Check the report before importing.")
+        clean.append((name[:60], attended - tracked_attended, total - tracked_total, remaining))
+    for name, attended, total, remaining in clean:
+        existing = db.q("SELECT id, remaining_classes FROM subjects WHERE lower(name)=lower(?) ORDER BY id", (name,))
+        if existing:
+            value = remaining if remaining is not None else existing[0]["remaining_classes"]
+            db.run("UPDATE subjects SET attended=?, total=?, remaining_classes=? WHERE id=?",
+                   (attended, total, value, existing[0]["id"]))
+            for duplicate in existing[1:]:
+                db.run("UPDATE subjects SET attended=0, total=0, remaining_classes=NULL WHERE id=?",
+                       (duplicate["id"],))
+        else:
+            db.run("INSERT INTO subjects(name,attended,total,remaining_classes) VALUES(?,?,?,?)",
+                   (name, attended, total, remaining))
+    return attendance_list()
+
+
+def _attendance_rows(text):
+    rows = []
+    for line in text.splitlines():
+        line = " ".join(line.split()).strip()
+        if not line:
+            continue
+        values = re.findall(r"(?<![A-Za-z])\d[\d,]*(?:\.\d+)?%?", line)
+        if not values and len(re.findall(r"\b(subject|course|attended|present|total|classes)\b", line, re.I)) >= 2:
+            continue
+        name = re.sub(r"(?<![A-Za-z])\d[\d,]*(?:\.\d+)?%?", " ", line)
+        name = re.sub(r"[\s|:/\\-]+", " ", name).strip(" .")
+        name = name[:60]
+        if not name or not re.search(r"[A-Za-z]", name):
+            continue
+        attended = total = None
+        count_values = values
+        if len(values) == 3 and values[-1].endswith("%"):
+            count_values = values[:2]
+        if len(count_values) == 2:
+            try:
+                attended, total = (_count(value.rstrip("%").replace(",", ""), "Class count")
+                                   for value in count_values)
+                if attended > total:
+                    attended = total = None
+            except ValueError:
+                attended = total = None
+        rows.append({"name": name, "attended": attended, "total": total, "remaining_classes": None})
+    return rows
+
+
+def extract_attendance_snapshot(filename, data):
+    if not data:
+        raise ValueError("Choose an attendance report PDF or image.")
+    if len(data) > 8 * 1024 * 1024:
+        raise ValueError("Attendance reports must be 8 MB or smaller.")
+    ext = os.path.splitext((filename or "").lower())[1]
+    mime = readers.IMG.get(ext)
+    if ext not in (".pdf",) + tuple(readers.IMG):
+        raise ValueError("Upload an attendance report PDF, PNG, JPG, or WEBP image.")
+    if mime:
+        signatures = {".png": b"\x89PNG\r\n\x1a\n", ".jpg": b"\xff\xd8\xff",
+                      ".jpeg": b"\xff\xd8\xff", ".webp": b"RIFF"}
+        if not data.startswith(signatures[ext]) or (ext == ".webp" and data[8:12] != b"WEBP"):
+            raise ValueError(f"This does not look like a valid {ext[1:].upper()} image.")
+        text = "\n".join(ocr.read_image_lines(data))
+    else:
+        if not data.startswith(b"%PDF"):
+            raise ValueError("This does not look like a valid PDF.")
+        units = readers.read_pdf(data, describe=lambda image, image_mime: "\n".join(ocr.read_image_lines(image)))
+        text = "\n\n".join(content for _, content in units)
+        if not text.strip():
+            raise ValueError("No readable attendance data found. Upload a clear screenshot or image of the report.")
+        text = re.sub(r"(?m)^Figure on this page:\s*", "", text)
+    return {"subjects": _attendance_rows(text), "text": text[:30000], "source": "Offline OCR"}
 
 
 def subject_add(name, attended=0, total=0):

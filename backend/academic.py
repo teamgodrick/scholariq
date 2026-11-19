@@ -75,6 +75,10 @@ def mark_lecture(class_id, day_value, status):
                (class_id, day_value, status))
     except sqlite3.IntegrityError:
         raise ValueError("This class already has a status for today.")
+    if status in ("present", "absent"):
+        subject = db.one("SELECT subject FROM timetable WHERE id=?", (class_id,))
+        db.run("UPDATE subjects SET remaining_classes=MAX(0, remaining_classes-1) "
+               "WHERE lower(name)=lower(?) AND remaining_classes IS NOT NULL", (subject["subject"],))
 
 
 def calendar_events():

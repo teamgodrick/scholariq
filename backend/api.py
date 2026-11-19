@@ -290,6 +290,22 @@ def attendance_add(r):
     return {"id": life.subject_add(r.body.get("name"), r.body.get("attended"), r.body.get("total"))}
 
 
+@route("POST", "/api/attendance/remaining")
+def attendance_remaining(r):
+    life.subject_set_remaining(r.body.get("name"), r.body.get("remaining_classes"))
+    return {"subjects": life.attendance_list()}
+
+
+@route("POST", "/api/attendance/extract")
+def attendance_extract(r):
+    return life.extract_attendance_snapshot(r.query.get("name", "attendance.pdf"), r.raw)
+
+
+@route("POST", "/api/attendance/snapshot")
+def attendance_snapshot(r):
+    return {"subjects": life.import_attendance_snapshot(r.body.get("subjects"))}
+
+
 @route("POST", r"/api/attendance/(\d+)/mark")
 def attendance_mark(r):
     life.subject_mark(r.args[0], bool(r.body.get("present")))

@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS checkins(id INTEGER PRIMARY KEY, day TEXT, sleep_h RE
 CREATE TABLE IF NOT EXISTS class_checkins(id INTEGER PRIMARY KEY, day TEXT, sleep_h REAL, mood INTEGER, water INTEGER, score INTEGER);
 CREATE TABLE IF NOT EXISTS habits(id INTEGER PRIMARY KEY, name TEXT);
 CREATE TABLE IF NOT EXISTS habit_logs(habit_id INTEGER, day TEXT, PRIMARY KEY(habit_id, day));
-CREATE TABLE IF NOT EXISTS subjects(id INTEGER PRIMARY KEY, name TEXT, attended INTEGER DEFAULT 0, total INTEGER DEFAULT 0);
+CREATE TABLE IF NOT EXISTS subjects(id INTEGER PRIMARY KEY, name TEXT, attended INTEGER DEFAULT 0, total INTEGER DEFAULT 0, remaining_classes INTEGER);
 CREATE TABLE IF NOT EXISTS timetable(id INTEGER PRIMARY KEY, subject TEXT NOT NULL, day TEXT NOT NULL, start_time TEXT NOT NULL, end_time TEXT NOT NULL, location TEXT DEFAULT '');
 CREATE TABLE IF NOT EXISTS lecture_attendance(id INTEGER PRIMARY KEY, timetable_id INTEGER NOT NULL, day TEXT NOT NULL, status TEXT NOT NULL, UNIQUE(timetable_id, day));
 CREATE TABLE IF NOT EXISTS academic_events(id INTEGER PRIMARY KEY, event_date TEXT NOT NULL, title TEXT NOT NULL, event_type TEXT NOT NULL DEFAULT 'Event', description TEXT DEFAULT '', UNIQUE(event_date, title));
@@ -44,6 +44,8 @@ def init():
         c.executescript(SCHEMA)
         if "label" not in [r[1] for r in c.execute("PRAGMA table_info(chunks)")]:
             c.execute("ALTER TABLE chunks ADD COLUMN label TEXT")
+        if "remaining_classes" not in [r[1] for r in c.execute("PRAGMA table_info(subjects)")]:
+            c.execute("ALTER TABLE subjects ADD COLUMN remaining_classes INTEGER")
         c.commit()
 
 

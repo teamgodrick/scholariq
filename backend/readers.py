@@ -46,12 +46,14 @@ def read_pdf(data, describe=None):
         text = (page.extract_text() or "").strip()
         if describe and seen < 8:
             try:
-                for im in list(page.images)[:2]:
-                    if len(im.data) > 8000:
-                        seen += 1
-                        text += "\nFigure on this page: " + describe(im.data, IMG.get(os.path.splitext(im.name)[1].lower(), "image/png"))
+                images = list(page.images)[:2]
             except Exception:
                 pass  # some embedded images cannot be decoded without extra libraries
+                images = []
+            for im in images:
+                if len(im.data) > 8000:
+                    seen += 1
+                    text += "\nFigure on this page: " + describe(im.data, IMG.get(os.path.splitext(im.name)[1].lower(), "image/png"))
         if text:
             units.append((f"Page {n}", text))
     return units

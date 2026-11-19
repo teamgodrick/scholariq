@@ -38,10 +38,93 @@ export async function attendance(root) {
   paintWeek();
   pickDay.addEventListener("change", paintDay);
   classDay.addEventListener("change", paintWeek);
-  const subjectName = h("input", { placeholder: "Subject name" });
-  const attended = h("input", { type: "number", min: 0, value: 0 });
-  const total = h("input", { type: "number", min: 0, value: 0 });
   const addDay = h("select", {}, weekdays.map((name) => h("option", { value: name }, name)));
+  const reportFile = h("input", { type: "file", accept: ".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp" });
+  const reportPreview = h("div");
+  const attendanceCards = subjects.length ? subjects.map((s) => {
+    const remainingInput = h("input", { type: "number", min: 0, max: 10000, step: 1,
+      value: s.remaining_classes == null ? "" : s.remaining_classes, placeholder: "Enter remaining classes" });
+    const target = s.remaining_classes == null
+      ? note("Enter how many classes remain to calculate your semester skip allowance.")
+      : s.extra_classes_needed > 0
+        ? h("p", { class: "bad" }, `Even attending all ${s.remaining_classes} remaining classes projects ${s.projected_pct}%. You would need ${s.extra_classes_needed} additional attended class(es) to reach 75%.`)
+        : s.semester_can_skip > 0
+          ? h("p", { class: "good" }, `You can miss up to ${s.semester_can_skip} of your ${s.remaining_classes} remaining classes and still finish at 75% or higher (if you attend the rest).`)
+          : h("p", {}, `Attend all ${s.remaining_classes} remaining classes to finish at ${s.projected_pct}%. No safe skips remain.`);
+    return card(null,
+      h("div", { class: "btns", style: "justify-content:space-between" },
+        h("strong", {}, s.name), h("span", { class: s.pct < 75 ? "bad" : "good" }, `${s.pct}% currently`)),
+      bar(s.pct, s.pct < 75 ? "red" : ""),
+      h("p", { class: "small muted" }, `${s.attended} of ${s.total} classes attended`),
+      target,
+      field("Classes remaining this semester", remainingInput),
+      btn("Save remaining classes", async () => {
+        await api("/attendance/remaining", { name: s.name, remaining_classes: remainingInput.value });
+        attendance(root);
+      }));
+  }) : [card(null, note("No subject attendance yet. Upload your current attendance report to get started."))];
+  const importCard = card("Import current attendance", field("Attendance report PDF or image", reportFile),
+    note("The report is processed on this laptop with offline OCR—no LM Studio or cloud upload is needed. Check and correct every extracted value before importing."),
+    btn("Read attendance report", async () => {
+      const selected = reportFile.files[0];
+      if (!selected) throw new Error("Choose an attendance report first.");
+      const result = await upload(`/attendance/extract?name=${encodeURIComponent(selected.name)}`, selected);
+      const rows = [];
+      const rowList = h("div");
+      const addRow = (subjectRow = {}) => {
+        const include = h("input", { type: "checkbox", checked: true });
+        const name = h("input", { value: subjectRow.name || "", maxlength: 60, placeholder: "Check subject name",
+          class: subjectRow.name ? "" : "uncertain-field" });
+        const attended = h("input", { type: "number", min: 0, step: 1,
+          class: subjectRow.attended == null ? "uncertain-field" : "",
+          value: subjectRow.attended == null ? "" : subjectRow.attended, placeholder: "Check count" });
+        const total = h("input", { type: "number", min: 0, step: 1,
+          class: subjectRow.total == null ? "uncertain-field" : "",
+          value: subjectRow.total == null ? "" : subjectRow.total, placeholder: "Check count" });
+        const remaining = h("input", { type: "number", min: 0, max: 10000, step: 1,
+          value: subjectRow.remaining_classes == null ? "" : subjectRow.remaining_classes, placeholder: "Optional" });
+        const warning = note("Some details were unclear. Check and fill the highlighted fields before saving.");
+        const record = { include, name, attended, total, remaining,
+          row: h("div", { class: "attendance-import-row" },
+            h("label", { class: "check" }, include, "Import"),
+            field("Subject", name), field("Attended", attended),
+            field("Total so far", total), field("Remaining this semester", remaining),
+            warning) };
+        const validCount = (input, max = 1000000) =>
+          input.value === "" || (Number.isInteger(Number(input.value)) && Number(input.value) >= 0 && Number(input.value) <= max);
+        const updateWarning = () => {
+          const invalidPair = !validCount(attended) || !validCount(total) ||
+            (attended.value !== "" && total.value !== "" && Number(attended.value) > Number(total.value));
+          name.classList.toggle("uncertain-field", !name.value.trim());
+          attended.classList.toggle("uncertain-field", invalidPair || attended.value === "");
+          total.classList.toggle("uncertain-field", invalidPair || total.value === "");
+          remaining.classList.toggle("uncertain-field", !validCount(remaining, 10000));
+          const incomplete = !name.value.trim() || invalidPair || attended.value === "" || total.value === "" ||
+            !validCount(remaining, 10000);
+          warning.hidden = !incomplete;
+          record.row.classList.toggle("incomplete", incomplete);
+        };
+        [name, attended, total, remaining].forEach((input) => input.addEventListener("input", updateWarning));
+        updateWarning();
+        rows.push(record);
+        rowList.append(record.row);
+        return record;
+      };
+      result.subjects.forEach(addRow);
+      fill(reportPreview, h("p", { class: "small muted" }, "Review and correct the OCR results before importing. If rows were not detected, add them from the recognized text below."),
+        h("details", { class: "ocr-details" }, h("summary", {}, "Show recognized text"), h("pre", { class: "ocr-text" }, result.text || "No text detected.")),
+        rowList,
+        btn("Add a subject", () => { addRow(); rows[rows.length - 1].name.focus(); }, "ghost"),
+        btn("Save selected attendance", async () => {
+          const picked = rows.filter((row) => row.include.checked).map((row) => ({
+            name: row.name.value, attended: row.attended.value, total: row.total.value,
+            remaining_classes: row.remaining.value === "" ? null : row.remaining.value,
+          }));
+          if (!picked.length) throw new Error("Select at least one subject to import.");
+          await api("/attendance/snapshot", { subjects: picked });
+          attendance(root);
+        }));
+    }), reportPreview);
   fill(root, head("Attendance & timetable", "Track each scheduled lecture once, or browse your weekly timetable."),
     card("Classes for " + day.weekday, field("View day", pickDay), classes),
     h("div", { class: "cols" },
@@ -52,17 +135,10 @@ export async function attendance(root) {
           await api("/timetable", { subject: subject.value, day: addDay.value, start_time: start.value, end_time: end.value, location: location.value });
           attendance(root);
         }))),
-    h("details", { class: "legacy-attendance" },
-      h("summary", {}, "Existing attendance totals (75% rule)"),
-      note("Totals include lecture marks. “No class” entries do not count toward attendance."),
-      subjects.length ? subjects.map((s) => card(null,
-        h("div", { class: "btns", style: "justify-content:space-between" }, h("strong", {}, s.name), h("span", { class: s.pct < 75 ? "bad" : "good" }, `${s.pct}%`)),
-        bar(s.pct, s.pct < 75 ? "red" : ""), h("p", { class: "small muted" }, `${s.attended} of ${s.total} classes attended`),
-        h("p", {}, s.pct < 75 ? `Attend the next ${s.need_to_attend} classes in a row to reach 75%.` : `You can safely skip ${s.can_skip} more class(es).`),
-        s.id ? btn("Remove", async () => { await api(`/attendance/${s.id}/delete`, {}); attendance(root); }, "ghost danger") : null)) :
-        card(null, note("No existing attendance totals.")),
-      card("Add an existing total", field("Subject", subjectName), h("div", { class: "two" }, field("Classes attended", attended), field("Total classes so far", total)),
-        btn("Add subject total", async () => { await api("/attendance", { name: subjectName.value, attended: Number(attended.value), total: Number(total.value) }); attendance(root); }))));
+    h("div", { class: "cols" },
+      card("Semester attendance", note("Your semester skip allowance assumes you attend every other remaining class. “No class” marks do not count."),
+        ...attendanceCards),
+      importCard));
 }
 
 export async function calendar(root) {
